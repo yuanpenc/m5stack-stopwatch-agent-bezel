@@ -1,0 +1,226 @@
+# Codex Micro for M5Stack StopWatch
+
+[简体中文](README.zh-CN.md)
+
+Turn an **M5Stack StopWatch Dev Kit C152** into an experimental Codex Micro
+control surface and a small Codex usage dashboard.
+
+![Native 466 x 466 dashboard preview](artifacts/dashboard-preview-v2-round.png)
+
+## What it does
+
+- Shows Agent status.
+- Shows weekly Codex allowance remaining and the reset countdown.
+- Turns a completed Agent green and plays a soft completion chime.
+- Uses the left physical button for push-to-talk.
+- Uses the right physical button for Voice Chat.
+- Uses the large center dial as Send.
+- Maps full-screen up, right, down, and left swipes to the four configurable
+  Codex Micro analog-stick directions.
+- Provides haptic feedback for the physical buttons and touch gestures.
+
+The control surface uses the Codex Micro-compatible BLE HID channel. Quota data
+travels separately from a local macOS companion over a project-owned BLE GATT
+service. The watch never stores an OpenAI token.
+
+## Requirements
+
+- **M5Stack StopWatch Dev Kit, SKU C152**. Other M5Stack devices are not
+  supported by this port.
+- A Mac with Bluetooth.
+- A data-capable USB-C cable for the first flash. Normal use is wireless.
+- ChatGPT Desktop with Codex Micro support and an existing signed-in Codex
+  session.
+- The local Codex app, CLI, or another local coding agent capable of running
+  shell commands.
+
+## Recommended installation: let Codex do it
+
+This is the primary installation path. The project intentionally does not
+distribute a prebuilt macOS app, DMG, or PKG. Codex builds the firmware and
+companion from source on the user's Mac and keeps machine-specific values local.
+
+### 1. Open the repository locally
+
+Download this repository as a ZIP or clone it, then open its folder in the
+Codex desktop app. Keep the repository on the Mac that will pair with the
+StopWatch.
+
+### 2. Connect the StopWatch
+
+Connect the C152 with a data-capable USB-C cable. Do not guess which serial port
+belongs to it if other development boards are connected.
+
+### 3. Paste this into Codex
+
+```text
+Install this project on my physical M5Stack StopWatch Dev Kit C152.
+
+Read AGENTS.md and README.md completely before acting. Work through the setup
+autonomously, but follow these safety rules:
+
+1. Start with read-only checks. Confirm macOS, the C152 target, available build
+   tools, and the exact newly connected serial device.
+2. Do not build or enable any microphone, USB Audio, BLE Audio, diagnostics, or
+   other deferred experiment. Use only the m5stack-stopwatch firmware target.
+3. Explain any missing dependency before installing it. Never ask me for an
+   OpenAI API key, login cookie, access token, or other credential.
+4. Show me the official M5Stack factory-recovery link and build the firmware
+   before attempting an upload.
+5. Immediately before flashing, report the exact /dev/cu.* port you resolved
+   and ask me to confirm that one destructive device action.
+6. After flashing, verify the CODEX_MICRO_STOPWATCH_READY serial marker and
+   guide me through macOS Bluetooth pairing.
+7. Help me configure ChatGPT Desktop: left button = Push to talk, Command Key 4
+   = Toggle voice chat, center = Send, and let me choose the four swipe actions.
+8. Build the Swift quota companion from source. Use demo discovery to find this
+   Mac's CoreBluetooth UUID, then bind real quota writes to that exact device.
+9. If I approve automatic startup, create the local app wrapper and LaunchAgent
+   only on this Mac. Keep generated paths, UUIDs, logs, and app files out of Git.
+10. Verify buttons, center Send, four swipes, Agent colors, completion chime,
+    haptics, and a real quota/reset update separately. Report anything that was
+    not physically observed as unverified.
+```
+
+The repository's [AGENTS.md](AGENTS.md) gives Codex durable installation and
+privacy boundaries, so the prompt can stay readable. Claude Code and other
+local coding agents can follow the same instructions, but Codex is the
+documented default path.
+
+### 4. Finish the visible permission steps
+
+Codex will handle the terminal work, but macOS may still require the user to:
+
+1. Approve installation of a missing build tool.
+2. Confirm the exact device immediately before flashing.
+3. Pair **Codex Micro** in **System Settings > Bluetooth**.
+4. Approve Bluetooth access for the locally built companion.
+5. Configure the actions in **ChatGPT Desktop > Settings > Codex Micro**.
+
+## Controls
+
+| StopWatch input | Reported control | Recommended Codex action |
+| --- | --- | --- |
+| Hold left physical button | Mic key `ACT10` | Push to talk |
+| Press right physical button | Command Key 4 `ACT09` | Toggle voice chat |
+| Tap the center quota dial | Send key `ACT12` | Send composer message |
+| Swipe up | Analog stick up | User configurable |
+| Swipe right | Analog stick right | User configurable |
+| Swipe down | Analog stick down | User configurable |
+| Swipe left | Analog stick left | User configurable |
+
+The installed ChatGPT Desktop version used during development exposed one Mic
+key rather than separate `ACT10` and `ACT11` assignments. The right button is
+therefore intentionally a configurable command key, not the second Mic switch.
+
+## Quota companion and privacy
+
+The Codex Micro HID interface does not include account rate limits. The Swift
+companion starts a local Codex App Server using the user's existing signed-in
+context, reads `account/rateLimits/read`, and sends only this small snapshot to
+the explicitly bound watch:
+
+- remaining percentage;
+- reset countdown;
+
+It does not send an API key, access token, account identifier, prompt, task text,
+or audio to the watch. Device MAC addresses, CoreBluetooth UUIDs, usernames,
+home-directory paths, and logs are local installation data and must never be
+committed. See [the companion documentation](companion/README.md) and the
+[GATT contract](docs/COMPANION_PROTOCOL.md).
+
+BLE pairing uses the platform's Just Works flow without passkey authentication.
+Use the project only in a trusted environment and remove stale pairings when a
+Mac or watch changes owner.
+
+## Manual build and flash
+
+The Codex-assisted flow is recommended. Maintainers can also build manually
+with [PlatformIO Core](https://docs.platformio.org/en/latest/core/index.html):
+
+```sh
+pio run -e m5stack-stopwatch
+pio device list
+```
+
+Identify the exact serial device that appeared for the connected C152. Build
+first, read M5Stack's
+[official StopWatch factory-recovery guide](https://docs.m5stack.com/en/guide/restore_factory/stopwatch),
+and only then flash the resolved port:
+
+```sh
+pio run -e m5stack-stopwatch --target upload --upload-port /dev/cu.YOUR_C152_PORT
+```
+
+Never copy a port from another user's documentation. A successful boot prints:
+
+```text
+CODEX_MICRO_STOPWATCH_READY
+```
+
+Pair **Codex Micro** in macOS, open ChatGPT Desktop, and configure the controls
+from the table above. If macOS cached an older HID descriptor, forget the device
+on the Mac, restart the watch, and pair it again.
+
+### Run the quota companion manually
+
+```sh
+cd companion
+swift build -c release
+
+# Demo data only; prints the UUID seen by this Mac.
+.build/release/codex-watch-companion --demo --verbose
+
+# Replace the placeholder locally. Never commit the resulting UUID.
+.build/release/codex-watch-companion \
+  --device-id YOUR_COREBLUETOOTH_UUID --watch --interval 60
+```
+
+Ask Codex to create the optional local app wrapper and per-user LaunchAgent for
+automatic startup. The repository contains generic templates, never a generated
+user configuration or prebuilt companion app.
+
+## Troubleshooting
+
+### The C152 does not appear as a serial device
+
+- Try a known data-capable USB-C cable and another port.
+- Disconnect other development boards, list ports again, and reconnect only the
+  C152.
+- If the installed firmware cannot boot, follow M5Stack's official download-mode
+  and factory-recovery instructions.
+
+### Codex Micro does not appear in Bluetooth settings
+
+- Restart the watch and scan again.
+- Forget any old **Codex Micro** pairing before retrying.
+- Confirm the firmware reached `CODEX_MICRO_STOPWATCH_READY` over serial.
+
+### The right button changes UI but does not open Voice Chat
+
+Assign **Command Key 4** to **Toggle voice chat** in ChatGPT Desktop. The right
+button sends `ACT09`; it is not `ACT11` in this port.
+
+### The screen says `SYNCING MAC` or quota is stale
+
+- Confirm the companion is running on the paired Mac.
+- Re-run demo discovery and bind the exact UUID printed on that Mac.
+- Do not use a UUID copied from another computer; CoreBluetooth identifiers are
+  local to the host.
+
+## Acknowledgements, license, and trademarks
+
+The Codex Micro compatibility layer was developed with
+[`imliubo/codex-micro-4-core2`](https://github.com/imliubo/codex-micro-4-core2)
+as an implementation reference. We thank its author and preserve the applicable
+MIT attribution in [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md). Space Mono
+remains under the SIL Open Font License 1.1 in `assets/fonts/OFL.txt`.
+
+OpenAI's documentation for the original device is available at
+[Codex Micro](https://learn.chatgpt.com/docs/features/codex-micro), and the local
+client interface used by the companion is documented under
+[Codex App Server](https://learn.chatgpt.com/docs/app-server).
+
+Names and marks are used only to identify compatibility. See
+[NOTICE.md](NOTICE.md) for attribution, protocol, security, warranty, and
+trademark notices.

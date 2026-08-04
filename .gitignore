@@ -1,0 +1,32 @@
+.pio/
+.vscode/
+.DS_Store
+.build/
+*.dSYM/
+
+# Local firmware and UI artifacts. Keep only the curated public preview.
+artifacts/*
+!artifacts/dashboard-preview-v2-round.png
+
+# The companion is built and wrapped locally so Bluetooth permission, device
+# binding, executable paths, and logs never become repository data.
+companion/.local/
+companion/dist/
+companion/launchd/*.plist
+!companion/launchd/*.plist.example
+
+# Deferred microphone/audio research is intentionally outside the public MVP.
+diagnostics/
+mac-audio-bridge/
+usb-mic-prototype/
+include/BleMicStreamer.h
+src/BleMicStreamer.cpp
+docs/BLE_AUDIO_HOST_VALIDATION.md
+docs/MAC_AUDIO_BRIDGE.md
+docs/MAC_AUDIO_DOWNLINK.md
+docs/MIC_CAPTURE_NOTES.md
+docs/USB_MIC_PLAN.md
+
+# The HTML sketches were exploratory; the native framebuffer preview is the
+# public rendering reference.
+ui-mock/
