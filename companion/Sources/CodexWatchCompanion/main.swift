@@ -32,6 +32,16 @@ private enum CompanionError: LocalizedError {
     }
 }
 
+private enum BLEWritePurpose {
+    case quota
+    case enterBootloader
+}
+
+private enum BLEWriteOutcome {
+    case completed
+    case commandAcknowledgedAndDisconnected
+}
+
 private final class AppServerClient {
     private let process = Process()
     private let inputPipe = Pipe()
@@ -184,19 +194,27 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
     private let payload: Data
     private let verbose: Bool
     private let expectedIdentifier: UUID?
+    private let purpose: BLEWritePurpose
     private var finished = false
-    private var result: Result<Void, Error>?
+    private var result: Result<BLEWriteOutcome, Error>?
     private var pendingPeripherals: [CBPeripheral] = []
     private var rejectedIdentifiers = Set<UUID>()
+    private var writeAcknowledgedAt: Date?
 
-    init(payload: Data, verbose: Bool, expectedIdentifier: UUID?) {
+    init(
+        payload: Data,
+        verbose: Bool,
+        expectedIdentifier: UUID?,
+        purpose: BLEWritePurpose = .quota
+    ) {
         self.payload = payload
         self.verbose = verbose
         self.expectedIdentifier = expectedIdentifier
+        self.purpose = purpose
         super.init()
     }
 
-    func write(timeout: TimeInterval = 40) throws {
+    func write(timeout: TimeInterval = 40) throws -> BLEWriteOutcome {
         guard payload.count <= 512 else {
             throw CompanionError.bluetooth("额度 payload 超过固件的 512-byte 上限")
         }
@@ -206,8 +224,19 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
             options: [CBCentralManagerOptionShowPowerAlertKey: true]
         )
 
-        let deadline = Date().addingTimeInterval(timeout)
-        while !finished, Date() < deadline {
+        let discoveryDeadline = Date().addingTimeInterval(timeout)
+        while !finished {
+            let now = Date()
+            if let writeAcknowledgedAt {
+                if now.timeIntervalSince(writeAcknowledgedAt) >= 5.0 {
+                    finish(.failure(CompanionError.bluetooth(
+                        "bootloader 命令已获 ATT ACK，但设备在 5 秒内没有断开；未确认进入下载模式"
+                    )))
+                    continue
+                }
+            } else if now >= discoveryDeadline {
+                break
+            }
             RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.1))
         }
         if !finished {
@@ -216,7 +245,10 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
             }
             throw CompanionError.bluetooth("未在 \(Int(timeout)) 秒内发现带有专属额度服务的 StopWatch")
         }
-        try result?.get()
+        guard let result else {
+            throw CompanionError.bluetooth("BLE 写入没有返回结果")
+        }
+        return try result.get()
     }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
@@ -237,13 +269,21 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
                 .filter(matchesExpectedDevice)
             if let peripheral = nextPendingPeripheral() {
                 if verbose {
-                    print("BLE 已开启；找到已连接的 StopWatch [\(peripheral.identifier)]…")
+                    if purpose == .enterBootloader {
+                        print("BLE 已开启；找到已绑定的 StopWatch…")
+                    } else {
+                        print("BLE 已开启；找到已连接的 StopWatch [\(peripheral.identifier)]…")
+                    }
                 }
                 use(peripheral, with: central)
             } else {
                 if verbose {
                     if let expectedIdentifier {
-                        print("BLE 已开启；只扫描已绑定的 StopWatch [\(expectedIdentifier)]…")
+                        if purpose == .enterBootloader {
+                            print("BLE 已开启；只扫描已绑定的 StopWatch…")
+                        } else {
+                            print("BLE 已开启；只扫描已绑定的 StopWatch [\(expectedIdentifier)]…")
+                        }
                     } else {
                         print("BLE 已开启；扫描 StopWatch 专属服务（demo 发现模式）…")
                     }
@@ -276,7 +316,11 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
         guard self.peripheral == nil else { return }
         guard matchesExpectedDevice(peripheral) else {
             if verbose {
-                print("忽略未绑定的 peripheral [\(peripheral.identifier)]")
+                if purpose == .enterBootloader {
+                    print("忽略未绑定的 peripheral")
+                } else {
+                    print("忽略未绑定的 peripheral [\(peripheral.identifier)]")
+                }
             }
             return
         }
@@ -287,7 +331,11 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
         guard !rejectedIdentifiers.contains(peripheral.identifier) else { return }
         if verbose {
             let name = peripheral.name ?? (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? "未命名设备"
-            print("发现 \(name) [\(peripheral.identifier)] RSSI=\(RSSI)")
+            if purpose == .enterBootloader {
+                print("发现 \(name) RSSI=\(RSSI)")
+            } else {
+                print("发现 \(name) [\(peripheral.identifier)] RSSI=\(RSSI)")
+            }
         }
         use(peripheral, with: central)
     }
@@ -299,15 +347,15 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         if expectedIdentifier == nil {
-            rejectAndContinue(peripheral, reason: "连接失败：\(error?.localizedDescription ?? "未知错误")")
+            rejectAndContinue(peripheral, reason: "连接失败：\(safeErrorDescription(error))")
         } else {
-            finish(.failure(CompanionError.bluetooth("连接 StopWatch 失败：\(error?.localizedDescription ?? "未知错误")")))
+            finish(.failure(CompanionError.bluetooth("连接 StopWatch 失败：\(safeErrorDescription(error))")))
         }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         if let error {
-            finish(.failure(CompanionError.bluetooth("发现 StopWatch 服务失败：\(error.localizedDescription)")))
+            finish(.failure(CompanionError.bluetooth("发现 StopWatch 服务失败：\(safeErrorDescription(error))")))
             return
         }
         guard let service = peripheral.services?.first(where: { $0.uuid == quotaServiceUUID }) else {
@@ -323,7 +371,7 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         if let error {
-            finish(.failure(CompanionError.bluetooth("发现额度写入特征失败：\(error.localizedDescription)")))
+            finish(.failure(CompanionError.bluetooth("发现额度写入特征失败：\(safeErrorDescription(error))")))
             return
         }
         guard let characteristic = service.characteristics?.first(where: { $0.uuid == quotaWriteUUID }) else {
@@ -332,11 +380,18 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
         }
 
         if characteristic.properties.contains(.write) {
-            if verbose { print("写入 \(payload.count) bytes 额度快照…") }
+            if verbose {
+                let label = purpose == .enterBootloader ? "bootloader 命令" : "额度快照"
+                print("写入 \(payload.count) bytes \(label)…")
+            }
             peripheral.writeValue(payload, for: characteristic, type: .withResponse)
         } else if characteristic.properties.contains(.writeWithoutResponse) {
+            guard purpose == .quota else {
+                finish(.failure(CompanionError.bluetooth("bootloader 命令要求带响应的 ATT 写入")))
+                return
+            }
             peripheral.writeValue(payload, for: characteristic, type: .withoutResponse)
-            finish(.success(()))
+            finish(.success(.completed))
         } else {
             finish(.failure(CompanionError.bluetooth("额度特征不可写")))
         }
@@ -344,13 +399,28 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         if let error {
-            finish(.failure(CompanionError.bluetooth("额度写入失败：\(error.localizedDescription)")))
+            finish(.failure(CompanionError.bluetooth("BLE 写入失败：\(safeErrorDescription(error))")))
+        } else if purpose == .enterBootloader {
+            writeAcknowledgedAt = Date()
+            if verbose { print("bootloader 命令已收到 ATT ACK；等待设备重启…") }
         } else {
-            finish(.success(()))
+            finish(.success(.completed))
         }
     }
 
-    private func finish(_ result: Result<Void, Error>) {
+    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        guard self.peripheral === peripheral else { return }
+        if purpose == .enterBootloader, writeAcknowledgedAt != nil {
+            finish(.success(.commandAcknowledgedAndDisconnected))
+            return
+        }
+        guard !finished else { return }
+        finish(.failure(CompanionError.bluetooth(
+            "StopWatch 在写入完成前断开：\(safeErrorDescription(error, fallback: "连接已关闭"))"
+        )))
+    }
+
+    private func finish(_ result: Result<BLEWriteOutcome, Error>) {
         guard !finished else { return }
         self.result = result
         finished = true
@@ -382,6 +452,18 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
         return peripheral.identifier == expectedIdentifier
     }
 
+    private func safeErrorDescription(_ error: Error?, fallback: String = "未知错误") -> String {
+        guard let error else { return fallback }
+        if purpose == .enterBootloader {
+            // NSError domain/code preserves actionable CoreBluetooth context
+            // without echoing an arbitrary localized string that could embed
+            // the bound peripheral identifier.
+            let cocoaError = error as NSError
+            return "\(cocoaError.domain) code \(cocoaError.code)"
+        }
+        return error.localizedDescription
+    }
+
     private func uniquePeripherals(_ peripherals: [CBPeripheral]) -> [CBPeripheral] {
         var seen = Set<UUID>()
         return peripherals.filter { seen.insert($0.identifier).inserted }
@@ -398,7 +480,13 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
     }
 
     private func rejectAndContinue(_ rejected: CBPeripheral, reason: String) {
-        if verbose { print("跳过 [\(rejected.identifier)]：\(reason)") }
+        if verbose {
+            if purpose == .enterBootloader {
+                print("跳过候选设备：\(reason)")
+            } else {
+                print("跳过 [\(rejected.identifier)]：\(reason)")
+            }
+        }
         rejectedIdentifiers.insert(rejected.identifier)
         manager.cancelPeripheralConnection(rejected)
         peripheral = nil
@@ -418,6 +506,7 @@ private struct Options {
     var interval: TimeInterval = 60
     var verbose = false
     var deviceIdentifier: UUID?
+    var enterBootloader = false
 }
 
 private func executableInPath(named executable: String) -> String? {
@@ -467,6 +556,8 @@ private func parseOptions() throws -> Options {
             options.jsonOnly = true
         case "--watch":
             options.watch = true
+        case "--enter-bootloader":
+            options.enterBootloader = true
         case "--interval":
             index += 1
             guard index < arguments.count, let seconds = Double(arguments[index]), seconds >= 10 else {
@@ -490,6 +581,8 @@ private func parseOptions() throws -> Options {
               --demo           使用合成额度，不启动 Codex App Server
               --json-only      只打印 JSON，不连接蓝牙
               --device-id UUID 只向这块已绑定的 StopWatch 写入
+              --enter-bootloader
+                              请求 USB-mic 固件重启到串口下载模式
               --codex-path P   指定 codex CLI 路径
               -v, --verbose    打印 App Server/BLE 进度
             """)
@@ -517,6 +610,29 @@ private func run() throws {
     _ = NSApplication.shared
     NSApplication.shared.setActivationPolicy(.prohibited)
     let options = try parseOptions()
+    if options.enterBootloader {
+        guard options.deviceIdentifier != nil else {
+            throw CompanionError.usage("--enter-bootloader 必须同时提供 --device-id")
+        }
+        guard !options.demo, !options.watch, !options.jsonOnly else {
+            throw CompanionError.usage("--enter-bootloader 不能与 --demo、--watch 或 --json-only 同时使用")
+        }
+
+        let payload = Data(#"{"op":"enter_bootloader","version":1,"confirm":true}"#.utf8)
+        let outcome = try BLEQuotaWriter(
+            payload: payload,
+            verbose: options.verbose,
+            expectedIdentifier: options.deviceIdentifier,
+            purpose: .enterBootloader
+        ).write()
+        switch outcome {
+        case .commandAcknowledgedAndDisconnected:
+            print("bootloader 命令已获 ATT ACK，随后 BLE 断开；仅在新 USB 串口出现后继续刷写")
+        case .completed:
+            throw CompanionError.bluetooth("bootloader 命令返回了意外的写入结果")
+        }
+        return
+    }
     if !options.demo, !options.jsonOnly, options.deviceIdentifier == nil {
         throw CompanionError.usage("写入真实额度必须提供 --device-id；先运行 --demo --verbose 查看 StopWatch UUID")
     }
@@ -545,7 +661,7 @@ private func run() throws {
         print(json)
 
         if !options.jsonOnly {
-            try BLEQuotaWriter(
+            _ = try BLEQuotaWriter(
                 payload: payload,
                 verbose: options.verbose,
                 expectedIdentifier: options.deviceIdentifier

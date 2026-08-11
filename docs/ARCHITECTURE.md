@@ -35,15 +35,56 @@ flowchart TD
 
 ## Voice boundary
 
-The StopWatch's ES8311 microphone and speaker are real hardware, but they are
-not part of the Codex Micro control protocol. Version 1 deliberately uses the
-Mac microphone, matching the original Codex Micro behavior. Streaming the
-watch microphone would require an independent USB Audio, BLE audio, or custom
-compressed-audio design and should not be conflated with protocol compatibility.
+The default build uses the Mac microphone. The optional
+`usb-mic` build exposes the StopWatch ES8311/MEMS capture path
+as a standard USB Audio Class mono input. That path is independent of Codex
+Micro compatibility: Bluetooth still carries control events, USB carries only
+microphone PCM, and no speaker interface is present.
 
 The left button uses Mic key `ACT10`. The tested ChatGPT Desktop layout exposed
 only one Mic-key assignment, so the right button uses configurable Command Key 4
 (`ACT09`) and is assigned to Toggle voice chat on the host.
+
+## Health model
+
+Connection and quota freshness are deliberately independent:
+
+- `OFFLINE`: no BLE GATT connection;
+- `BLE ONLY`: at least one BLE connection, but no recent complete host HID RPC;
+- `CODEX LIVE`: a complete host RPC was parsed during the current connection
+  epoch within the last five minutes;
+- `SYNC STALE`: no accepted quota write arrived within three minutes. This can
+  appear at the same time as `CODEX LIVE`.
+
+Only a successfully parsed HID RPC with a non-empty method proves Codex host
+activity. Outgoing keys, raw fragments, the quota companion, and a generic BLE
+connection do not promote the link to `CODEX LIVE`.
+
+## Power lifecycle
+
+The default wireless image has four display/power states:
+
+1. active;
+2. dimmed;
+3. desk sleep, with the CO5300 put to sleep and the shared AMOLED/audio/motor
+   L3B rail disabled while the ESP32 and BLE continue running;
+4. Travel Mode, using M5PM1 shutdown so BLE and Agent alerts stop completely.
+
+The pinned M5GFX framebuffer wrapper did not forward physical AMOLED sleep or
+repeat initialization. `scripts/patch_m5gfx_amoled_sleep.py` applies a narrow,
+checked build-time patch so the controller is put to sleep before G8 is cut and
+can replay its initialization sequence after G8/G5 power-reset recovery.
+
+USB input voltage selects Dock Mode: battery policy dims/sleeps after 2/5
+minutes, while Dock Mode uses 10/30 minutes. The optional USB-mic image cannot
+remove L3B without also losing its microphone, so it keeps the rail on and uses
+brightness-only desk sleep. A short red-power-button click toggles desk sleep; a
+fast double-click runs the clean Travel shutdown path. The firmware disables
+PM1's immediate double-click cut so it can release HID controls and show the
+offline warning first. A six-second center-dial hold provides a slower fallback.
+The red button's hardware long-hold download path remains available for
+recovery. This release relies on the PM1 power button or VIN
+insertion for cold wake; no IMU or scheduled RTC wake is configured.
 
 ## Failure modes
 
@@ -54,3 +95,5 @@ only one Mic-key assignment, so the right button uses configurable Command Key 4
   connected.
 - Companion stops updating; the UI marks data stale after three minutes.
 - Reset countdown reaches zero before a refreshed snapshot arrives.
+- A future M5GFX source change no longer matches the checked AMOLED patch; the
+  build fails instead of silently producing brightness-only sleep.

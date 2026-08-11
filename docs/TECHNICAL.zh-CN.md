@@ -7,6 +7,8 @@
 - [Companion 数据协议](COMPANION_PROTOCOL.md)
 - [移植验证清单](PORTING.md)
 
-本项目使用未公开的兼容协议，任何 ChatGPT Desktop 更新都可能导致失效。当前
-MVP 已经在真实 C152 上完成验证；修改 HID descriptor、按键映射或 BLE 服务后，
-必须重新完成 `device.status` 往返和实体控制验证，不能仅凭编译通过声称兼容。
+本项目使用未公开的兼容协议，任何 ChatGPT Desktop 更新都可能导致失效。原有
+HID MVP 已经在真实 C152 上完成验证；新加入的电池 / 连接健康和电源生命周期仍需
+按 [移植验证清单](PORTING.md) 完成真机验收。修改 HID descriptor、按键映射或 BLE
+服务后，必须重新完成 `device.status` 往返和实体控制验证，不能仅凭编译通过声称
+兼容。

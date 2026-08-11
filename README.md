@@ -11,6 +11,8 @@ control surface and a small Codex usage dashboard.
 
 - Shows Agent status.
 - Shows weekly Codex allowance remaining and the reset countdown.
+- Shows battery, charging/Dock state, and whether Codex, BLE, and quota sync
+  are actually healthy.
 - Turns a completed Agent green and plays a soft completion chime.
 - Uses the left physical button for push-to-talk.
 - Uses the right physical button for Voice Chat.
@@ -18,6 +20,8 @@ control surface and a small Codex usage dashboard.
 - Maps full-screen up, right, down, and left swipes to the four configurable
   Codex Micro analog-stick directions.
 - Provides haptic feedback for the physical buttons and touch gestures.
+- Supports BLE-aware desk sleep and a long-hold Travel Mode power-off.
+- Optionally exposes the StopWatch microphone to the Mac over USB.
 
 The control surface uses the Codex Micro-compatible BLE HID channel. Quota data
 travels separately from a local macOS companion over a project-owned BLE GATT
@@ -28,7 +32,8 @@ service. The watch never stores an OpenAI token.
 - **M5Stack StopWatch Dev Kit, SKU C152**. Other M5Stack devices are not
   supported by this port.
 - A Mac with Bluetooth.
-- A data-capable USB-C cable for the first flash. Normal use is wireless.
+- A data-capable USB-C cable for the first flash. Normal use is wireless; the
+  optional microphone build keeps the cable connected while recording.
 - ChatGPT Desktop with Codex Micro support and an existing signed-in Codex
   session.
 - The local Codex app, CLI, or another local coding agent capable of running
@@ -87,6 +92,37 @@ privacy boundaries, so the prompt can stay readable. Claude Code and other
 local coding agents can follow the same instructions, but Codex is the
 documented default path.
 
+### Optional: use the StopWatch as a USB microphone (experimental)
+
+The default build uses the Mac's microphone. Users who want the StopWatch's
+built-in microphone can instead ask Codex to install the isolated `usb-mic`
+build. On macOS it appears as **Codex StopWatch Mic**, with 48 kHz,
+16-bit, mono input. It does not expose a USB speaker, and the watch's
+local completion chime plays only while the Mac is not streaming microphone
+audio. BLE controls and the dashboard remain included.
+
+Paste this after opening the repository in Codex:
+
+```text
+Install the optional USB microphone build on my physical M5Stack StopWatch C152.
+Read AGENTS.md and README.md first. Build the isolated usb-mic PlatformIO
+project with `pio run -d usb-mic`; do not add a USB speaker/output endpoint.
+The existing local-only idle completion chime may remain enabled. Follow
+the documented factory-recovery and exact-port confirmation rules before
+flashing. Afterward, verify that macOS lists "Codex StopWatch Mic" as an
+input device and help me make a short local
+recording test. Do not commit the recording, device identifiers, or local paths.
+```
+
+After installation, select **Codex StopWatch Mic** in **System Settings >
+Sound > Input**. ChatGPT Desktop still receives Push to talk and Voice Chat
+actions over Bluetooth, while voice samples travel through USB.
+
+Both images use Bluedroid for the Codex Micro BLE transport. If macOS keeps an
+older HID descriptor after switching images, forget only the StopWatch's
+**Codex Micro** entry and pair it again. Do not remove a separately connected
+physical Codex Micro keyboard.
+
 ### 4. Finish the visible permission steps
 
 Codex will handle the terminal work, but macOS may still require the user to:
@@ -108,10 +144,30 @@ Codex will handle the terminal work, but macOS may still require the user to:
 | Swipe right | Analog stick right | User configurable |
 | Swipe down | Analog stick down | User configurable |
 | Swipe left | Analog stick left | User configurable |
+| Click the red power button | Desk sleep / wake | BLE alerts remain active |
+| Double-click the red power button | Travel Mode power-off | Power button or USB wakes it |
+| Hold the center dial for 6 seconds | Warned Travel Mode fallback | Power button or USB wakes it |
 
 The installed ChatGPT Desktop version used during development exposed one Mic
 key rather than separate `ACT10` and `ACT11` assignments. The right button is
 therefore intentionally a configurable command key, not the second Mic switch.
+
+On battery, the display dims after two minutes and enters desk sleep after five
+minutes. Dock Mode is detected from USB input power and extends those intervals
+to ten and thirty minutes. The default wireless image turns off the shared
+AMOLED/audio/motor rail during desk sleep while keeping BLE alive; the optional
+USB-mic image keeps its audio rail on and uses brightness-only desk sleep.
+Travel Mode is a real PM1 shutdown, so Agent alerts are missed until the power
+button or USB power starts the device again. The red-button double-click uses a
+firmware-confirmed clean shutdown instead of PM1's immediate hardware cut; a
+long red-button hold remains the hardware recovery/download gesture. The
+six-second center hold is a deliberately slower fallback with an on-screen
+missed-alert warning.
+
+The native renderer and both firmware targets pass their current build-time
+checks. Those checks cannot validate physical power switching: C152 sleep/wake
+and shutdown soak testing is still pending, so treat the timings and wake
+behavior as experimental until that checklist is completed.
 
 ## Quota companion and privacy
 
@@ -161,6 +217,20 @@ CODEX_MICRO_STOPWATCH_READY
 Pair **Codex Micro** in macOS, open ChatGPT Desktop, and configure the controls
 from the table above. If macOS cached an older HID descriptor, forget the device
 on the Mac, restart the watch, and pair it again.
+
+For the optional input-only USB microphone image, use the same exact-port and
+recovery checks, but build and upload the isolated project instead:
+
+```sh
+pio run -d usb-mic
+pio run -d usb-mic -e m5stack-stopwatch-usb-mic --target upload \
+  --upload-port /dev/cu.YOUR_C152_PORT
+```
+
+Once it boots, the normal USB serial port is replaced by the audio interface.
+For later updates, Codex can use the companion's encrypted
+`--enter-bootloader` command and then verify the newly enumerated serial port.
+M5Stack's manual recovery gesture remains the fallback.
 
 ### Run the quota companion manually
 

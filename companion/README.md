@@ -58,6 +58,28 @@ Useful diagnostics:
 .build/release/codex-watch-companion --demo --verbose
 ```
 
+## Optional USB-mic bootloader request
+
+The USB-mic firmware can be asked to restart into the ESP32-S3 serial
+bootloader over the same encrypted private GATT characteristic:
+
+```sh
+.build/release/codex-watch-companion \
+  --device-id YOUR_COREBLUETOOTH_UUID --enter-bootloader
+```
+
+This explicit maintenance mode cannot be combined with `--demo`, `--watch`, or
+`--json-only`. The USB-mic firmware requires an encrypted, with-response write
+from the same BLE peer that completed a valid Codex HID RPC in the current
+connection epoch. Its main loop checks VBUS, waits 400 ms, checks VBUS again,
+and only then restarts. The stable non-microphone firmware never acts on this
+command.
+
+An ATT acknowledgement proves only that the encrypted command reached the
+device, so the companion exits successfully only after BLE disconnects. Before
+uploading, resolve the newly enumerated `/dev/cu.*` bootloader port and verify
+that it belongs to this StopWatch; never reuse or guess a stale port.
+
 ## Optional local background installation
 
 For unattended CoreBluetooth access, Codex can wrap the locally built binary in

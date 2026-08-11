@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstdint>
 #include <cstdio>
 
@@ -43,10 +42,22 @@ enum class AgentStatus : std::uint8_t {
   Active,
 };
 
+enum class LinkHealth : std::uint8_t {
+  Offline,
+  BleOnly,
+  CodexLive,
+};
+
+enum class PowerOverlay : std::uint8_t {
+  None,
+  HoldToPowerOff,
+  PoweringOff,
+};
+
 struct ThreadVisual {
   std::uint32_t color = 0;
   float brightness = 0.0f;
-  bool breathing = false;
+  bool focused = false;
 };
 
 struct Point {
@@ -56,7 +67,10 @@ struct Point {
 
 struct State {
   std::array<ThreadVisual, 6> threads = {};
-  bool connected = false;
+  LinkHealth linkHealth = LinkHealth::Offline;
+  std::int8_t batteryPercent = -1;
+  bool charging = false;
+  bool docked = false;
   bool quotaAvailable = false;
   bool quotaStale = false;
   float remainingPercent = 0.0f;
@@ -67,6 +81,8 @@ struct State {
   int activeTouchAgent = -1;
   int swipeDirection = -1;
   int completedAgent = -1;
+  PowerOverlay powerOverlay = PowerOverlay::None;
+  float powerHoldProgress = 0.0f;
 };
 
 // Real 466 x 466 framebuffer coordinates, orbit radius 164 around (233, 236).
@@ -98,6 +114,26 @@ inline AgentStatus classify(const ThreadVisual& light) {
   }
   if (red > green * 1.20f && red > blue * 1.20f) return AgentStatus::Error;
   return AgentStatus::Active;
+}
+
+inline const char* linkHealthLabel(LinkHealth health) {
+  switch (health) {
+    case LinkHealth::CodexLive: return "CODEX LIVE";
+    case LinkHealth::BleOnly: return "BLE ONLY";
+    case LinkHealth::Offline: return "OFFLINE";
+  }
+  return "OFFLINE";
+}
+
+template <typename Surface>
+std::uint16_t linkHealthColor(Surface& surface, LinkHealth health) {
+  switch (health) {
+    case LinkHealth::CodexLive: return kVoice;
+    case LinkHealth::BleOnly:
+      return surface.color565(66, 146, 245);  // same azure as thinking
+    case LinkHealth::Offline: return kDanger;
+  }
+  return kDanger;
 }
 
 inline void formatReset(std::uint32_t seconds, char* output, std::size_t size) {
@@ -158,18 +194,17 @@ inline std::uint32_t statusFillRgb(AgentStatus status,
 }
 
 template <typename Surface>
-void drawAgentShapes(Surface& surface, const State& state, std::uint32_t nowMs) {
+void drawAgentShapes(Surface& surface, const State& state) {
   for (int i = 0; i < 6; ++i) {
     const ThreadVisual& light = state.threads[i];
     const AgentStatus status = classify(light);
-    float pulse = 1.0f;
-    if (light.breathing) {
-      pulse = 0.58f + 0.42f * (std::sin(nowMs * 0.006f) * 0.5f + 0.5f);
-    }
     const Point point = kAgentCenters[i];
     const bool pressed = state.activeTouchAgent == i;
 
     if (status == AgentStatus::Unassigned) {
+      if (light.focused) {
+        surface.fillSmoothCircle(point.x, point.y, kAgentRadius + 4, kText);
+      }
       surface.fillSmoothCircle(point.x, point.y, kAgentRadius, kTrack);
       surface.fillSmoothCircle(point.x, point.y, kAgentRadius - 2,
                                pressed ? kPanelPressed : kPanel);
@@ -184,14 +219,20 @@ void drawAgentShapes(Surface& surface, const State& state, std::uint32_t nowMs) 
     if (emphasized) {
       surface.fillSmoothCircle(
           point.x, point.y, kAgentRadius + 4,
-          rgb888To565(surface, fillRgb, light.brightness * 0.16f * pulse));
+          rgb888To565(surface, fillRgb, light.brightness * 0.16f));
+    }
+
+    // Codex supplies the live focus signal. Draw it as a static ice-white ring
+    // directly against the key edge; there is deliberately no black gap.
+    if (light.focused) {
+      surface.fillSmoothCircle(point.x, point.y, kAgentRadius + 4, kText);
     }
 
     // Solid keys: the full disc carries the status color so state reads at a
     // glance; a pressed key dims instead of swapping to a panel fill. The
     // darker same-hue edge seats the disc into the face like a physical key.
     const float fillBrightness =
-        light.brightness * pulse * (pressed ? 0.72f : 1.0f);
+        light.brightness * (pressed ? 0.72f : 1.0f);
     surface.fillSmoothCircle(point.x, point.y, kAgentRadius,
                              rgb888To565(surface, fillRgb, fillBrightness * 0.55f));
     surface.fillSmoothCircle(point.x, point.y, kAgentRadius - 4,
@@ -224,7 +265,10 @@ void drawDialShapes(Surface& surface, const State& state) {
   if (state.quotaAvailable) {
     const float remaining =
         std::max(0.0f, std::min(100.0f, state.remainingPercent));
-    const std::uint16_t color = remaining > 20.0f ? kAccent : kWarning;
+    const std::uint16_t color =
+        state.quotaStale
+            ? surface.color565(116, 85, 39)
+            : (remaining > 20.0f ? kAccent : kWarning);
     surface.fillArc(kCenterX, kQuotaCenterY, outerRadius, innerRadius, 0,
                     static_cast<int>(remaining * 3.6f), color);
   }
@@ -249,24 +293,72 @@ template <typename Surface>
 void drawSmallText(Surface& surface, const State& state) {
   surface.loadFont(font_data::kSpaceMono18Vlw);
 
-  // Connection status lives inside the dial: the top edge belongs to the
-  // enlarged agent keys now. Disconnected turns the whole label into the call
-  // to action instead of a separate status line.
-  const std::uint16_t connectionColor = state.connected ? kVoice : kDanger;
-  surface.fillSmoothCircle(kCenterX, kQuotaCenterY - 67, 5, connectionColor);
+  // The health word is the status light: color and copy distinguish a live
+  // Codex session from a bare BLE link, a stale companion, and no link at all.
+  // Keeping it inside the dial leaves the six edge keys at their full size.
+  centered(surface, linkHealthLabel(state.linkHealth), kCenterX,
+           kQuotaCenterY - 69, linkHealthColor(surface, state.linkHealth));
 
-  const char* dialLabel = !state.connected
-                              ? "CODEX / PAIR"
-                              : (state.quotaStale ? "WEEKLY STALE"
-                                                  : "WEEKLY LEFT");
-  const std::uint16_t dialLabelColor =
-      (!state.connected || state.quotaStale) ? kWarning : kMuted;
+  const char* dialLabel =
+      state.quotaStale
+          ? "SYNC STALE"
+          : (state.linkHealth == LinkHealth::Offline ? "WAITING CODEX"
+                                                     : "WEEKLY LEFT");
+  const std::uint16_t dialLabelColor = state.quotaStale ? kWarning : kMuted;
   centered(surface, dialLabel, kCenterX, kQuotaCenterY - 39, dialLabelColor);
 
   char reset[24];
   formatReset(state.resetInSeconds, reset, sizeof(reset));
-  centered(surface, state.quotaAvailable ? reset : "SYNCING MAC", kCenterX,
-           kQuotaCenterY + 47, state.quotaAvailable ? kText : kMuted);
+  const char* resetLabel = state.quotaAvailable
+                               ? reset
+                               : (state.quotaStale ? "CHECK COMPANION"
+                                                   : "NO QUOTA DATA");
+  const std::uint16_t resetColor =
+      state.quotaStale ? kMuted : (state.quotaAvailable ? kText : kMuted);
+  centered(surface, resetLabel, kCenterX, kQuotaCenterY + 43, resetColor);
+
+  // Compact battery telemetry at the foot of the dial. A bright bolt is the
+  // charging affordance; percentage remains readable without relying on color.
+  constexpr int kBatteryX = kCenterX - 38;
+  constexpr int kBatteryY = kQuotaCenterY + 62;
+  constexpr int kBatteryWidth = 29;
+  constexpr int kBatteryHeight = 15;
+  const int battery = std::max(-1, std::min(100,
+      static_cast<int>(state.batteryPercent)));
+  const std::uint16_t batteryColor =
+      battery < 0 ? kMuted
+                  : (state.docked ? kAccent
+                                  : (battery <= 20 ? kWarning : kText));
+
+  surface.fillSmoothRoundRect(kBatteryX, kBatteryY, kBatteryWidth,
+                              kBatteryHeight, 3, batteryColor);
+  surface.fillSmoothRoundRect(kBatteryX + 2, kBatteryY + 2,
+                              kBatteryWidth - 4, kBatteryHeight - 4, 2,
+                              kBackground);
+  surface.fillSmoothRoundRect(kBatteryX + kBatteryWidth, kBatteryY + 4, 3,
+                              kBatteryHeight - 8, 1, batteryColor);
+  if (battery > 0) {
+    const int fillWidth = std::max(2, (kBatteryWidth - 6) * battery / 100);
+    surface.fillSmoothRoundRect(kBatteryX + 3, kBatteryY + 3, fillWidth,
+                                kBatteryHeight - 6, 1, batteryColor);
+  }
+  if (state.charging) {
+    const int boltX = kBatteryX + kBatteryWidth / 2;
+    surface.fillTriangle(boltX, kBatteryY + 1, boltX - 5, kBatteryY + 8,
+                         boltX - 1, kBatteryY + 8, kText);
+    surface.fillTriangle(boltX - 1, kBatteryY + 7, boltX + 4,
+                         kBatteryY + 7, boltX - 3,
+                         kBatteryY + kBatteryHeight - 1, kText);
+  }
+
+  char batteryLabel[12];
+  if (battery < 0) {
+    std::snprintf(batteryLabel, sizeof(batteryLabel), "--%%");
+  } else {
+    std::snprintf(batteryLabel, sizeof(batteryLabel), "%d%%", battery);
+  }
+  centered(surface, batteryLabel, kCenterX + 21,
+           kBatteryY + kBatteryHeight / 2 + 1, batteryColor);
 
   for (int i = 0; i < 6; ++i) {
     char label[4];
@@ -285,7 +377,8 @@ void drawQuotaValue(Surface& surface, const State& state) {
   if (state.quotaAvailable) {
     std::snprintf(value, sizeof(value), "%.0f%%",
                   std::max(0.0f, std::min(100.0f, state.remainingPercent)));
-    centered(surface, value, kCenterX, kQuotaCenterY + 1, kText);
+    centered(surface, value, kCenterX, kQuotaCenterY + 1,
+             state.quotaStale ? kMuted : kText);
   } else {
     centered(surface, "--", kCenterX, kQuotaCenterY + 1, kMuted);
   }
@@ -329,13 +422,44 @@ void drawTransient(Surface& surface, const State& state) {
 }
 
 template <typename Surface>
-void render(Surface& surface, const State& state, std::uint32_t nowMs) {
+void drawPowerOverlay(Surface& surface, const State& state) {
+  if (state.powerOverlay == PowerOverlay::None) return;
+
+  const bool confirming =
+      state.powerOverlay == PowerOverlay::HoldToPowerOff;
+  const char* heading = confirming ? "KEEP HOLDING" : "POWERING OFF";
+  const char* detail = confirming ? "ALERTS PAUSE" : "RED OR USB WAKE";
+  const std::uint16_t color = confirming ? kWarning : kDanger;
+
+  // Power state owns the dial interior. This completely masks the stale quota
+  // copy without reaching into the surrounding agent keys.
+  constexpr int kOverlayRadius = 104;
+  constexpr int kOverlayInnerRadius = 94;
+  surface.fillSmoothCircle(kCenterX, kQuotaCenterY, kOverlayRadius, kTrack);
+  const float progress = confirming
+                             ? std::max(0.0f, std::min(1.0f,
+                                   state.powerHoldProgress))
+                             : 1.0f;
+  surface.fillArc(kCenterX, kQuotaCenterY, kOverlayRadius,
+                  kOverlayInnerRadius, 0,
+                  static_cast<int>(progress * 360.0f), color);
+  surface.fillSmoothCircle(kCenterX, kQuotaCenterY,
+                           kOverlayInnerRadius - 3, kPanel);
+  surface.loadFont(font_data::kSpaceMono18Vlw);
+  centered(surface, heading, kCenterX, kQuotaCenterY - 13, color);
+  centered(surface, detail, kCenterX, kQuotaCenterY + 17, kText);
+  surface.unloadFont();
+}
+
+template <typename Surface>
+void render(Surface& surface, const State& state) {
   surface.fillScreen(kBackground);
   drawDialShapes(surface, state);
-  drawAgentShapes(surface, state, nowMs);
+  drawAgentShapes(surface, state);
   drawSmallText(surface, state);
   drawQuotaValue(surface, state);
   drawTransient(surface, state);
+  drawPowerOverlay(surface, state);
 }
 
 inline int agentAtPoint(int x, int y) {

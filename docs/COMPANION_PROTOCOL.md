@@ -10,9 +10,8 @@ This is a project-owned protocol. It is not part of Codex Micro.
 | Quota write characteristic | `7f0d4e66-2ac2-4a71-bfbe-4ef61a0e5c02` |
 
 The characteristic accepts Write and Write Without Response over an encrypted,
-bonded BLE link. The first companion write therefore initiates the same trusted
-pairing used by HID. Payloads are UTF-8 JSON and must be no larger than 512
-bytes.
+bonded BLE link. The first companion write therefore uses the same BLE bond as
+HID. Payloads are UTF-8 JSON and must be no larger than 512 bytes.
 
 ## Snapshot schema
 
@@ -43,7 +42,24 @@ bytes.
 6. Refresh at most once per minute unless the App Server sends a change event.
 
 Agent status and all button actions deliberately stay on the native Codex Micro
-HID channel. The companion owns quota only.
+HID channel.
+
+## Optional maintenance request
+
+Only the USB-microphone image accepts this write-with-response request:
+
+```json
+{"op":"enter_bootloader","version":1,"confirm":true}
+```
+
+The firmware accepts it only while USB power is present and only from the same
+BLE peer that completed a valid Codex HID RPC in the current connection epoch.
+It checks USB power again after a short delay before restarting into the
+ESP32-S3 serial bootloader. The default wireless image ignores this operation.
+
+An ATT acknowledgement proves delivery, not a restart. The companion reports
+success only after the BLE link disconnects; the flashing workflow must still
+discover and verify the newly enumerated `/dev/cu.*` port.
 
 Do not send account identifiers, access tokens, prompts, task text, or other
 private content to the watch.

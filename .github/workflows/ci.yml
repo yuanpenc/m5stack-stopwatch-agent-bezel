@@ -25,11 +25,55 @@ jobs:
         run: |
           c++ -std=c++17 -Iinclude simulator/gesture_test.cpp -o /tmp/gesture-test
           /tmp/gesture-test
+      - name: Test completion banner expiry
+        run: |
+          c++ -std=c++17 -Iinclude simulator/completion_banner_test.cpp -o /tmp/completion-banner-test
+          /tmp/completion-banner-test
+      - name: Test red power-button gestures
+        run: |
+          c++ -std=c++17 -Iinclude simulator/power_button_gesture_test.cpp -o /tmp/power-button-gesture-test
+          /tmp/power-button-gesture-test
+      - name: Test connection-health classification
+        run: |
+          c++ -std=c++17 -Iinclude simulator/connection_health_test.cpp -o /tmp/connection-health-test
+          /tmp/connection-health-test
+      - name: Test quota payload validation
+        run: |
+          c++ -std=c++17 -Iinclude -I.pio/libdeps/m5stack-stopwatch/ArduinoJson/src simulator/quota_payload_test.cpp -o /tmp/quota-payload-test
+          /tmp/quota-payload-test
+      - name: Test host RPC authorization
+        run: |
+          c++ -std=c++17 -Iinclude -I.pio/libdeps/m5stack-stopwatch/ArduinoJson/src simulator/host_rpc_request_test.cpp -o /tmp/host-rpc-request-test
+          /tmp/host-rpc-request-test
+
+  usb-microphone:
+    name: Optional USB microphone firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PlatformIO
+        run: python -m pip install platformio==6.1.19
+      - name: Build microphone-only USB Audio image
+        run: pio run -d usb-mic
+      - name: Build deterministic microphone transport image
+        run: pio run -d usb-mic -e m5stack-stopwatch-usb-mic-synthetic
+      - name: Test microphone recording validator
+        run: python3 scripts/usb_mic_validate.py self-test
 
   companion:
     name: macOS companion
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Type-check HID diagnostic helpers
+        run: |
+          swiftc -warnings-as-errors -typecheck scripts/hid_inspect.swift
+          swiftc -warnings-as-errors -typecheck scripts/hid_rpc_probe.swift
+          swiftc -warnings-as-errors -typecheck scripts/hid_input_probe.swift
+      - name: Type-check microphone capture helper
+        run: swiftc -warnings-as-errors -typecheck scripts/usb_mic_capture.swift
       - name: Build release companion
         run: swift build --package-path companion -c release

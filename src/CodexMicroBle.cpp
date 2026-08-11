@@ -4,9 +4,23 @@
 
 #include "CodexMicroBle.h"
 
+#include "HostRpcRequest.h"
+#include "QuotaPayload.h"
+
 #include <BLEDevice.h>
+#include <BLE2902.h>
+#include <BLE2904.h>
+#include <BLEDescriptor.h>
 #include <BLESecurity.h>
 #include <BLEUtils.h>
+#if defined(CODEX_STOPWATCH_USB_MIC)
+#include <M5Unified.h>
+#include <esp32-hal-tinyusb.h>
+#endif
+#if defined(CODEX_STOPWATCH_USB_MIC) && defined(CONFIG_BLUEDROID_ENABLED)
+#include <Preferences.h>
+#include <esp_gap_ble_api.h>
+#endif
 
 namespace {
 
@@ -17,6 +31,12 @@ constexpr char kQuotaServiceUuid[] = "7f0d4e66-2ac2-4a71-bfbe-4ef61a0e5c01";
 constexpr char kQuotaWriteUuid[] = "7f0d4e66-2ac2-4a71-bfbe-4ef61a0e5c02";
 constexpr size_t kPayloadSize = 61;
 constexpr size_t kReportBodySize = 63;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+constexpr int16_t kBootloaderMinimumVbusMv = 4000;
+constexpr uint32_t kBootloaderRestartDelayMs = 400;
+constexpr char kBootloaderRequest[] =
+    "{\"op\":\"enter_bootloader\",\"version\":1,\"confirm\":true}";
+#endif
 
 constexpr uint16_t swapBytes(uint16_t value) {
   return static_cast<uint16_t>((value << 8) | (value >> 8));
@@ -47,10 +67,48 @@ class SecurityCallbacks final : public BLESecurityCallbacks {
   uint32_t onPassKeyRequest() override { return 0; }
   void onPassKeyNotify(uint32_t) override {}
   bool onConfirmPIN(uint32_t) override { return true; }
+#if defined(CONFIG_BLUEDROID_ENABLED)
   void onAuthenticationComplete(esp_ble_auth_cmpl_t result) override {
     Serial.printf("BLE pairing %s\n", result.success ? "complete" : "failed");
   }
+#elif defined(CONFIG_NIMBLE_ENABLED)
+  void onAuthenticationComplete(ble_gap_conn_desc* result) override {
+    const bool secure =
+        result != nullptr && result->sec_state.encrypted && result->sec_state.bonded;
+    Serial.printf("BLE pairing %s\n", secure ? "complete" : "failed");
+  }
+#endif
 };
+
+#if defined(CODEX_STOPWATCH_USB_MIC) && defined(CONFIG_BLUEDROID_ENABLED)
+void clearIncompatibleBondsOnce() {
+  Preferences preferences;
+  if (!preferences.begin("codex-mic", false)) return;
+  constexpr uint8_t kGattRevision = 1;
+  if (preferences.getUChar("gatt-rev", 0) >= kGattRevision) {
+    preferences.end();
+    return;
+  }
+
+  int count = esp_ble_get_bond_device_num();
+  int removed = 0;
+  if (count > 0) {
+    auto* devices = new esp_ble_bond_dev_t[count];
+    int listed = count;
+    if (esp_ble_get_bond_device_list(&listed, devices) == ESP_OK) {
+      for (int index = 0; index < listed; ++index) {
+        if (esp_ble_remove_bond_device(devices[index].bd_addr) == ESP_OK) {
+          ++removed;
+        }
+      }
+    }
+    delete[] devices;
+  }
+  preferences.putUChar("gatt-rev", kGattRevision);
+  preferences.end();
+  Serial.printf("BLE bond migration complete removed=%d\n", removed);
+}
+#endif
 
 }  // namespace
 
@@ -58,18 +116,29 @@ class CodexMicroBle::ServerCallbacks final : public BLEServerCallbacks {
  public:
   explicit ServerCallbacks(CodexMicroBle& owner) : owner_(owner) {}
 
-  void onConnect(BLEServer*, esp_ble_gatts_cb_param_t*) override {
-    owner_.onConnected(true);
+  // Arduino-ESP32 invokes both overloads for every Bluedroid event. Keep the
+  // parameterless hooks quiet and consume only the conn_id-bearing callback.
+  void onConnect(BLEServer*) override {}
+  void onDisconnect(BLEServer*) override {}
+
+#if defined(CONFIG_BLUEDROID_ENABLED)
+  void onConnect(BLEServer*, esp_ble_gatts_cb_param_t* param) override {
+    if (param != nullptr) {
+      owner_.onConnectionEvent(true, param->connect.conn_id);
+    }
     // macOS owns the first connection for HOGP. Keep advertising so the
     // companion can establish a second app-level connection to the private
     // quota service instead of being locked out by the HID link.
     BLEDevice::startAdvertising();
   }
 
-  void onDisconnect(BLEServer*, esp_ble_gatts_cb_param_t*) override {
-    owner_.onConnected(false);
+  void onDisconnect(BLEServer*, esp_ble_gatts_cb_param_t* param) override {
+    if (param != nullptr) {
+      owner_.onConnectionEvent(false, param->disconnect.conn_id);
+    }
     BLEDevice::startAdvertising();
   }
+#endif
 
  private:
   CodexMicroBle& owner_;
@@ -79,9 +148,13 @@ class CodexMicroBle::OutputCallbacks final : public BLECharacteristicCallbacks {
  public:
   explicit OutputCallbacks(CodexMicroBle& owner) : owner_(owner) {}
 
-  void onWrite(BLECharacteristic* characteristic) override {
-    const std::string value = characteristic->getValue();
-    owner_.onOutput(reinterpret_cast<const uint8_t*>(value.data()), value.size());
+  void onWrite(BLECharacteristic* characteristic,
+               esp_ble_gatts_cb_param_t* param) override {
+    if (param == nullptr) return;
+    const auto value = characteristic->getValue();
+    owner_.onOutput(reinterpret_cast<const uint8_t*>(value.c_str()),
+                    value.length(), param->write.conn_id,
+                    param->write.bda);
   }
 
  private:
@@ -92,9 +165,13 @@ class CodexMicroBle::QuotaCallbacks final : public BLECharacteristicCallbacks {
  public:
   explicit QuotaCallbacks(CodexMicroBle& owner) : owner_(owner) {}
 
-  void onWrite(BLECharacteristic* characteristic) override {
-    const std::string value = characteristic->getValue();
-    owner_.onQuotaWrite(reinterpret_cast<const uint8_t*>(value.data()), value.size());
+  void onWrite(BLECharacteristic* characteristic,
+               esp_ble_gatts_cb_param_t* param) override {
+    if (param == nullptr) return;
+    const auto value = characteristic->getValue();
+    owner_.onQuotaWrite(reinterpret_cast<const uint8_t*>(value.c_str()),
+                        value.length(), param->write.need_rsp,
+                        param->write.bda);
   }
 
  private:
@@ -107,31 +184,128 @@ void CodexMicroBle::begin() {
   if (outputQueue_ == nullptr) {
     Serial.println("BLE output queue allocation failed");
   }
+  connectionEventQueue_ = xQueueCreate(16, sizeof(PendingConnectionEvent));
+  if (connectionEventQueue_ == nullptr) {
+    Serial.println("BLE connection event queue allocation failed");
+  }
+  quotaWriteQueue_ = xQueueCreate(4, sizeof(PendingQuotaWrite));
+  if (quotaWriteQueue_ == nullptr) {
+    Serial.println("BLE quota write queue allocation failed");
+  }
 
   BLEDevice::init(kDeviceName);
   BLEDevice::setSecurityCallbacks(new SecurityCallbacks());
+
+#if defined(CODEX_STOPWATCH_USB_MIC) && defined(CONFIG_BLUEDROID_ENABLED)
+  // Arduino-ESP32 3.x and 2.x persist different Bluedroid GATT metadata. Clear
+  // the old bond exactly once when installing the optional USB-mic image, so
+  // macOS negotiates the compact table below instead of retrying stale keys.
+  clearIncompatibleBondsOnce();
+#endif
 
   auto* security = new BLESecurity();
   security->setCapability(ESP_IO_CAP_NONE);
   security->setAuthenticationMode(ESP_LE_AUTH_BOND);
 
-  BLEServer* server = BLEDevice::createServer();
+  server_ = BLEDevice::createServer();
+  BLEServer* server = server_;
   server->setCallbacks(new ServerCallbacks(*this));
 
-  // This private GATT service is intentionally separate from the emulated
-  // Codex Micro HID protocol. A trusted Mac companion writes rate-limit
-  // snapshots here; ChatGPT Desktop continues to own all control actions.
-  BLEService* quotaService = server->createService(kQuotaServiceUuid);
-  BLECharacteristic* quotaWrite = quotaService->createCharacteristic(
-      kQuotaWriteUuid,
-      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
-  // Requiring link encryption makes the first companion write establish the
-  // same trusted BLE bond used by the HID reports. On macOS this also avoids a
-  // separate, fragile name-based pairing step in System Settings.
-  quotaWrite->setAccessPermissions(ESP_GATT_PERM_WRITE_ENCRYPTED);
-  quotaWrite->setCallbacks(new QuotaCallbacks(*this));
-  quotaService->start();
+#if defined(CODEX_STOPWATCH_USB_MIC) && defined(CONFIG_BLUEDROID_ENABLED)
+  // The Arduino-ESP32 3.x BLEHIDDevice helper requests a 40-handle service.
+  // On the C152 USB-mic image that service can fail registration while its
+  // advertised UUID remains visible. Register the small table this protocol
+  // actually uses and check every service start explicitly.
+  BLEService* deviceInfo =
+      server->createService(BLEUUID(static_cast<uint16_t>(0x180A)), 8);
+  hidService_ =
+      server->createService(BLEUUID(static_cast<uint16_t>(0x1812)), 20);
+  BLEService* batteryService =
+      server->createService(BLEUUID(static_cast<uint16_t>(0x180F)), 6);
 
+  BLECharacteristic* manufacturer = deviceInfo->createCharacteristic(
+      static_cast<uint16_t>(0x2A29), BLECharacteristic::PROPERTY_READ);
+  manufacturer->setValue(kManufacturer);
+  BLECharacteristic* pnp = deviceInfo->createCharacteristic(
+      static_cast<uint16_t>(0x2A50), BLECharacteristic::PROPERTY_READ);
+  const uint8_t pnpValue[] = {
+      0x02,
+      static_cast<uint8_t>(kVendorId & 0xFF),
+      static_cast<uint8_t>(kVendorId >> 8),
+      static_cast<uint8_t>(kProductId & 0xFF),
+      static_cast<uint8_t>(kProductId >> 8),
+      0x01,
+      0x01,
+  };
+  pnp->setValue(const_cast<uint8_t*>(pnpValue), sizeof(pnpValue));
+
+  BLECharacteristic* hidInfo = hidService_->createCharacteristic(
+      static_cast<uint16_t>(0x2A4A), BLECharacteristic::PROPERTY_READ);
+  const uint8_t hidInfoValue[] = {0x11, 0x01, 0x00, 0x01};
+  hidInfo->setValue(const_cast<uint8_t*>(hidInfoValue), sizeof(hidInfoValue));
+  BLECharacteristic* reportMap = hidService_->createCharacteristic(
+      static_cast<uint16_t>(0x2A4B), BLECharacteristic::PROPERTY_READ);
+  reportMap->setValue(const_cast<uint8_t*>(kReportMap), sizeof(kReportMap));
+  hidService_->createCharacteristic(
+      static_cast<uint16_t>(0x2A4C), BLECharacteristic::PROPERTY_WRITE_NR);
+  BLECharacteristic* protocolMode = hidService_->createCharacteristic(
+      static_cast<uint16_t>(0x2A4E),
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE_NR);
+  const uint8_t reportProtocol = 0x01;
+  protocolMode->setValue(const_cast<uint8_t*>(&reportProtocol), 1);
+
+  input_ = hidService_->createCharacteristic(
+      static_cast<uint16_t>(0x2A4D),
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  input_->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED |
+                               ESP_GATT_PERM_WRITE_ENCRYPTED);
+  auto* inputReference =
+      new BLEDescriptor(BLEUUID(static_cast<uint16_t>(0x2908)));
+  const uint8_t inputReferenceValue[] = {kReportId, 0x01};
+  inputReference->setValue(const_cast<uint8_t*>(inputReferenceValue),
+                           sizeof(inputReferenceValue));
+  inputReference->setAccessPermissions(ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE);
+  input_->addDescriptor(inputReference);
+  auto* inputCccd = new BLE2902();
+  inputCccd->setAccessPermissions(ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE);
+  input_->addDescriptor(inputCccd);
+
+  BLECharacteristic* output = hidService_->createCharacteristic(
+      static_cast<uint16_t>(0x2A4D),
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE |
+          BLECharacteristic::PROPERTY_WRITE_NR);
+  output->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED |
+                               ESP_GATT_PERM_WRITE_ENCRYPTED);
+  auto* outputReference =
+      new BLEDescriptor(BLEUUID(static_cast<uint16_t>(0x2908)));
+  const uint8_t outputReferenceValue[] = {kReportId, 0x02};
+  outputReference->setValue(const_cast<uint8_t*>(outputReferenceValue),
+                            sizeof(outputReferenceValue));
+  outputReference->setAccessPermissions(ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE);
+  output->addDescriptor(outputReference);
+  output->setCallbacks(new OutputCallbacks(*this));
+
+  battery_ = batteryService->createCharacteristic(
+      static_cast<uint16_t>(0x2A19),
+      BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  auto* batteryFormat = new BLE2904();
+  batteryFormat->setFormat(BLE2904::FORMAT_UINT8);
+  batteryFormat->setNamespace(1);
+  batteryFormat->setUnit(0x27AD);
+  battery_->addDescriptor(batteryFormat);
+  auto* batteryCccd = new BLE2902();
+  batteryCccd->setNotifications(true);
+  batteryCccd->setAccessPermissions(ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE);
+  battery_->addDescriptor(batteryCccd);
+  battery_->setValue(&batteryPercentage_, 1);
+
+  const bool deviceInfoStarted = deviceInfo->start();
+  const bool hidStarted = hidService_->start();
+  const bool batteryStarted = batteryService->start();
+  server->start();
+  Serial.printf("BLE compact services device_info=%d hid=%d battery=%d\n",
+                deviceInfoStarted, hidStarted, batteryStarted);
+#else
   hid_ = new BLEHIDDevice(server);
   hid_->manufacturer()->setValue(kManufacturer);
   // Low release bits mark the transport as wireless in the desktop bridge.
@@ -146,10 +320,36 @@ void CodexMicroBle::begin() {
   output->setCallbacks(new OutputCallbacks(*this));
   hid_->startServices();
   hid_->setBatteryLevel(batteryPercentage_);
+  hidService_ = hid_->hidService();
+#endif
+
+  // This private GATT service is intentionally separate from the emulated
+  // Codex Micro HID protocol. A trusted Mac companion writes rate-limit
+  // snapshots here; ChatGPT Desktop continues to own all control actions.
+#if defined(CODEX_STOPWATCH_USB_MIC) && defined(CONFIG_BLUEDROID_ENABLED)
+  BLEService* quotaService =
+      server->createService(BLEUUID(String(kQuotaServiceUuid)), 4);
+#else
+  BLEService* quotaService = server->createService(kQuotaServiceUuid);
+#endif
+  BLECharacteristic* quotaWrite = quotaService->createCharacteristic(
+      kQuotaWriteUuid,
+      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+  // Requiring link encryption makes the first companion write establish the
+  // same trusted BLE bond used by the HID reports. On macOS this also avoids a
+  // separate, fragile name-based pairing step in System Settings.
+  quotaWrite->setAccessPermissions(ESP_GATT_PERM_WRITE_ENCRYPTED);
+  quotaWrite->setCallbacks(new QuotaCallbacks(*this));
+#if defined(CODEX_STOPWATCH_USB_MIC) && defined(CONFIG_BLUEDROID_ENABLED)
+  const bool quotaStarted = quotaService->start();
+  Serial.printf("Quota GATT service started=%d\n", quotaStarted);
+#else
+  quotaService->start();
+#endif
 
   BLEAdvertising* advertising = BLEDevice::getAdvertising();
   advertising->setAppearance(GENERIC_HID);
-  advertising->addServiceUUID(hid_->hidService()->getUUID());
+  advertising->addServiceUUID(hidService_->getUUID());
   advertising->addServiceUUID(kQuotaServiceUuid);
   advertising->setScanResponse(true);
   advertising->setMinPreferred(0x06);
@@ -164,9 +364,14 @@ void CodexMicroBle::begin() {
 }
 
 void CodexMicroBle::poll() {
-  if (outputQueue_ == nullptr) {
-    return;
-  }
+  processConnectionEvents();
+  reconcileConnectionSet();
+  processQuotaWrites();
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  processPendingBootloaderRestart();
+#endif
+
+  if (outputQueue_ == nullptr) return;
 
   PendingOutputReport report;
   while (xQueueReceive(outputQueue_, &report, 0) == pdTRUE) {
@@ -174,14 +379,18 @@ void CodexMicroBle::poll() {
       rpcBuffer_.clear();
       continue;
     }
-    processOutput(report.data.data(), report.length);
+    processOutput(report.data.data(), report.length, report.connectionId,
+                  report.peerAddress);
   }
 }
 
 void CodexMicroBle::setBattery(uint8_t percentage, bool charging) {
   batteryPercentage_ = constrain(percentage, 0, 100);
   charging_ = charging;
-  if (hid_ != nullptr && connected()) {
+  if (battery_ != nullptr) {
+    battery_->setValue(&batteryPercentage_, 1);
+    if (connected()) battery_->notify();
+  } else if (hid_ != nullptr && connected()) {
     hid_->setBatteryLevel(batteryPercentage_);
   }
 }
@@ -236,39 +445,164 @@ CodexMicroState CodexMicroBle::snapshot() {
   return copy;
 }
 
-void CodexMicroBle::onConnected(bool connected) {
-  xSemaphoreTake(stateMutex_, portMAX_DELAY);
-  if (connected) {
-    if (connectionCount_ < UINT8_MAX) ++connectionCount_;
-  } else if (connectionCount_ > 0) {
-    --connectionCount_;
+void CodexMicroBle::onConnectionEvent(bool connected, uint16_t id) {
+  if (connectionEventQueue_ == nullptr) {
+    connectionEventLost_.store(true, std::memory_order_release);
+    return;
   }
-  state_.connected = connectionCount_ > 0;
-  state_.dirty = true;
-  const uint8_t connectionCount = connectionCount_;
-  xSemaphoreGive(stateMutex_);
-  if (outputQueue_ != nullptr) {
-    PendingOutputReport reset;
-    xQueueSend(outputQueue_, &reset, 0);
+  PendingConnectionEvent event;
+  event.id = id;
+  event.connected = connected;
+  if (xQueueSend(connectionEventQueue_, &event, 0) != pdTRUE) {
+    connectionEventLost_.store(true, std::memory_order_release);
   }
-  Serial.printf("BLE host %s count=%u\n",
-                connected ? "connected" : "disconnected", connectionCount);
 }
 
-void CodexMicroBle::onOutput(const uint8_t* data, size_t length) {
-  if (data == nullptr || length == 0 || outputQueue_ == nullptr) {
+void CodexMicroBle::applyConnectionEvent(const PendingConnectionEvent& event) {
+  const connection_health::ConnectionSet::Transition transition =
+      connections_.apply(event.connected, event.id);
+  if (transition.overflow) {
+    connectionEventLost_.store(true, std::memory_order_release);
+    return;
+  }
+  if (!transition.changed || stateMutex_ == nullptr) return;
+
+  const uint8_t count = static_cast<uint8_t>(connections_.count());
+
+  xSemaphoreTake(stateMutex_, portMAX_DELAY);
+  const bool hostDisconnected =
+      !event.connected && hostRpcConnectionValid_ &&
+      hostRpcConnectionId_ == event.id;
+  if (transition.becameConnected) {
+    ++state_.connectionEpoch;
+    state_.lastHostRpcAtMs = 0;
+    state_.hostRpcObserved = false;
+    clearHostRpcIdentity();
+  } else if (transition.becameDisconnected || hostDisconnected) {
+    state_.lastHostRpcAtMs = 0;
+    state_.hostRpcObserved = false;
+    clearHostRpcIdentity();
+  }
+  state_.connected = count > 0;
+  state_.dirty = true;
+  const uint32_t connectionEpoch = state_.connectionEpoch;
+  xSemaphoreGive(stateMutex_);
+
+  if (transition.becameConnected || transition.becameDisconnected ||
+      (!event.connected && rpcBufferConnectionValid_ &&
+       rpcBufferConnectionId_ == event.id)) {
+    rpcBuffer_.clear();
+    rpcBufferConnectionValid_ = false;
+  }
+  Serial.printf("BLE host event=%s id=%u count=%u epoch=%lu\n",
+                event.connected ? "connected" : "disconnected", event.id,
+                count, static_cast<unsigned long>(connectionEpoch));
+}
+
+void CodexMicroBle::processConnectionEvents() {
+  if (connectionEventQueue_ == nullptr) return;
+  PendingConnectionEvent event;
+  while (xQueueReceive(connectionEventQueue_, &event, 0) == pdTRUE) {
+    applyConnectionEvent(event);
+  }
+}
+
+void CodexMicroBle::reconcileConnectionSet() {
+  if (server_ == nullptr || stateMutex_ == nullptr) return;
+  const bool eventLost =
+      connectionEventLost_.exchange(false, std::memory_order_acq_rel);
+  if (!eventLost) return;
+  connection_health::ConnectionSet observed;
+  bool overflow = false;
+  const auto peers = server_->getPeerDevices(false);
+  for (const auto& peer : peers) {
+    if (observed.apply(true, peer.first).overflow) overflow = true;
+  }
+  if (overflow) {
+    connectionEventLost_.store(true, std::memory_order_release);
+    return;
+  }
+
+  // At least one ordered event was lost. Fail closed even if final membership
+  // happens to match: an unseen empty->connected cycle must never inherit the
+  // old session's CODEX LIVE state.
+  connections_ = observed;
+  const uint8_t count = static_cast<uint8_t>(connections_.count());
+  xSemaphoreTake(stateMutex_, portMAX_DELAY);
+  if (count > 0) {
+    ++state_.connectionEpoch;
+  }
+  state_.connected = count > 0;
+  state_.lastHostRpcAtMs = 0;
+  state_.hostRpcObserved = false;
+  clearHostRpcIdentity();
+  state_.dirty = true;
+  const uint32_t epoch = state_.connectionEpoch;
+  xSemaphoreGive(stateMutex_);
+  rpcBuffer_.clear();
+  rpcBufferConnectionValid_ = false;
+  Serial.printf("BLE connections reconciled count=%u epoch=%lu\n", count,
+                static_cast<unsigned long>(epoch));
+}
+
+void CodexMicroBle::clearHostRpcIdentity() {
+  hostRpcConnectionValid_ = false;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  hostRpcPeerAddress_.fill(0);
+  hostRpcPeerEpoch_ = 0;
+  hostRpcPeerValid_ = false;
+#endif
+}
+
+void CodexMicroBle::noteHostRpcActivity(
+    uint16_t connectionId, const PeerAddress& peerAddress) {
+  if (stateMutex_ == nullptr || !connections_.contains(connectionId)) return;
+  xSemaphoreTake(stateMutex_, portMAX_DELAY);
+  if (!state_.connected) {
+    xSemaphoreGive(stateMutex_);
+    return;
+  }
+  const bool promoted = !state_.hostRpcObserved;
+  state_.hostRpcObserved = true;
+  state_.lastHostRpcAtMs = millis();
+  hostRpcConnectionId_ = connectionId;
+  hostRpcConnectionValid_ = true;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  hostRpcPeerAddress_ = peerAddress;
+  hostRpcPeerEpoch_ = state_.connectionEpoch;
+  hostRpcPeerValid_ = true;
+#endif
+  if (promoted) state_.dirty = true;
+  xSemaphoreGive(stateMutex_);
+}
+
+void CodexMicroBle::onOutput(const uint8_t* data, size_t length,
+                             uint16_t connectionId,
+                             const uint8_t* peerAddress) {
+  if (data == nullptr || length == 0 || peerAddress == nullptr ||
+      outputQueue_ == nullptr) {
     return;
   }
 
   PendingOutputReport report;
   report.length = static_cast<uint8_t>(min<size_t>(length, report.data.size()));
+  report.connectionId = connectionId;
+  memcpy(report.peerAddress.data(), peerAddress, report.peerAddress.size());
   memcpy(report.data.data(), data, report.length);
   xQueueSend(outputQueue_, &report, 0);
 }
 
-void CodexMicroBle::processOutput(const uint8_t* data, size_t length) {
-  if (data == nullptr || length < 2) {
+void CodexMicroBle::processOutput(const uint8_t* data, size_t length,
+                                  uint16_t connectionId,
+                                  const PeerAddress& peerAddress) {
+  if (data == nullptr || length < 2 || !connections_.contains(connectionId)) {
     return;
+  }
+
+  if (rpcBufferConnectionValid_ &&
+      rpcBufferConnectionId_ != connectionId) {
+    rpcBuffer_.clear();
+    rpcBufferConnectionValid_ = false;
   }
 
   // HOGP normally strips the report ID. Accept an included ID as well so the
@@ -301,6 +635,8 @@ void CodexMicroBle::processOutput(const uint8_t* data, size_t length) {
       return;
     }
     rpcBuffer_.concat(payload + jsonStart, payloadLength - jsonStart);
+    rpcBufferConnectionId_ = connectionId;
+    rpcBufferConnectionValid_ = true;
   } else {
     rpcBuffer_.concat(payload, payloadLength);
   }
@@ -316,11 +652,44 @@ void CodexMicroBle::processOutput(const uint8_t* data, size_t length) {
     return;
   }
 
-  handleRpc(request);
+  if (handleRpc(request)) {
+    noteHostRpcActivity(connectionId, peerAddress);
+  }
   rpcBuffer_.clear();
+  rpcBufferConnectionValid_ = false;
 }
 
-void CodexMicroBle::onQuotaWrite(const uint8_t* data, size_t length) {
+void CodexMicroBle::onQuotaWrite(const uint8_t* data, size_t length,
+                                 bool responseExpected,
+                                 const uint8_t* peerAddress) {
+  if (data == nullptr || length == 0 || length > 512 ||
+      peerAddress == nullptr || quotaWriteQueue_ == nullptr) {
+    Serial.println("Quota update rejected: invalid length");
+    return;
+  }
+
+  PendingQuotaWrite write;
+  write.length = static_cast<uint16_t>(length);
+  write.responseExpected = responseExpected;
+  memcpy(write.peerAddress.data(), peerAddress, write.peerAddress.size());
+  memcpy(write.data.data(), data, length);
+  if (xQueueSend(quotaWriteQueue_, &write, 0) != pdTRUE) {
+    Serial.println("Quota update rejected: queue full");
+  }
+}
+
+void CodexMicroBle::processQuotaWrites() {
+  if (quotaWriteQueue_ == nullptr) return;
+  PendingQuotaWrite write;
+  while (xQueueReceive(quotaWriteQueue_, &write, 0) == pdTRUE) {
+    processQuotaWrite(write.data.data(), write.length, write.responseExpected,
+                      write.peerAddress);
+  }
+}
+
+void CodexMicroBle::processQuotaWrite(const uint8_t* data, size_t length,
+                                      bool responseExpected,
+                                      const PeerAddress& peerAddress) {
   if (data == nullptr || length == 0 || length > 512) {
     Serial.println("Quota update rejected: invalid length");
     return;
@@ -333,41 +702,110 @@ void CodexMicroBle::onQuotaWrite(const uint8_t* data, size_t length) {
     return;
   }
 
-  JsonObjectConst value = update.as<JsonObjectConst>();
-  if (value["remaining_percent"].isNull()) {
-    Serial.println("Quota update rejected: missing remaining_percent");
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  const JsonObjectConst request = update.as<JsonObjectConst>();
+  if (request.containsKey("op")) {
+    if (!isBootloaderRequest(data, length)) {
+      Serial.println("Bootloader request rejected: invalid command");
+      return;
+    }
+    if (!responseExpected) {
+      Serial.println("Bootloader request rejected: ATT response required");
+      return;
+    }
+    if (!isBootloaderPeerAuthorized(peerAddress)) {
+      Serial.println("Bootloader request rejected: HID host mismatch");
+      return;
+    }
+    if (!usbPowerPresent()) {
+      Serial.println("Bootloader request rejected: USB power not present");
+      return;
+    }
+    if (!bootloaderRestartPending_) {
+      bootloaderRestartPending_ = true;
+      bootloaderRestartAtMs_ = millis() + kBootloaderRestartDelayMs;
+      Serial.println("Bootloader request accepted; restart pending");
+    }
     return;
   }
-  const float remaining =
-      constrain(value["remaining_percent"].as<float>(), 0.0f, 100.0f);
-  const uint32_t resetInSeconds = value["reset_in_seconds"] | 0U;
+#endif
+
+  quota_payload::Snapshot snapshot;
+  if (!quota_payload::parse(update.as<JsonObjectConst>(), snapshot)) {
+    Serial.println("Quota update rejected: invalid fields");
+    return;
+  }
 
   xSemaphoreTake(stateMutex_, portMAX_DELAY);
-  state_.quota.remainingPercent = remaining;
-  state_.quota.resetInSeconds = resetInSeconds;
+  state_.quota.remainingPercent = snapshot.remainingPercent;
+  state_.quota.resetInSeconds = snapshot.resetInSeconds;
   state_.quota.receivedAtMs = millis();
   state_.quota.available = true;
   state_.dirty = true;
   xSemaphoreGive(stateMutex_);
 
-  Serial.printf("Quota update remaining=%.1f reset=%lus\n", remaining,
-                static_cast<unsigned long>(resetInSeconds));
+  Serial.printf("Quota update remaining=%.1f reset=%lus\n",
+                snapshot.remainingPercent,
+                static_cast<unsigned long>(snapshot.resetInSeconds));
 }
 
-void CodexMicroBle::handleRpc(const JsonDocument& request) {
-  const char* method = request["method"] | "";
-  JsonVariantConst id = request["id"];
-  JsonVariantConst params = request["params"];
-  Serial.printf("RPC method=%s\n", method);
+#if defined(CODEX_STOPWATCH_USB_MIC)
+bool CodexMicroBle::isBootloaderRequest(const uint8_t* data,
+                                        size_t length) const {
+  constexpr size_t kExpectedLength = sizeof(kBootloaderRequest) - 1;
+  return data != nullptr && length == kExpectedLength &&
+         memcmp(data, kBootloaderRequest, kExpectedLength) == 0;
+}
 
-  if (strcmp(method, "sys.version") == 0) {
-    StaticJsonDocument<128> resultDoc;
-    resultDoc["version"] = kFirmwareVersion;
-    sendResult(id, resultDoc.as<JsonVariantConst>());
+bool CodexMicroBle::isBootloaderPeerAuthorized(
+    const PeerAddress& peerAddress) const {
+  if (stateMutex_ == nullptr) return false;
+  xSemaphoreTake(stateMutex_, portMAX_DELAY);
+  const bool authorized =
+      hostRpcPeerValid_ && hostRpcConnectionValid_ && state_.hostRpcObserved &&
+      hostRpcPeerEpoch_ == state_.connectionEpoch &&
+      hostRpcPeerAddress_ == peerAddress;
+  xSemaphoreGive(stateMutex_);
+  return authorized;
+}
+
+bool CodexMicroBle::usbPowerPresent() const {
+  return M5.Power.getVBUSVoltage() >= kBootloaderMinimumVbusMv;
+}
+
+void CodexMicroBle::processPendingBootloaderRestart() {
+  if (!bootloaderRestartPending_ ||
+      static_cast<int32_t>(millis() - bootloaderRestartAtMs_) < 0) {
+    return;
+  }
+  bootloaderRestartPending_ = false;
+  if (!usbPowerPresent()) {
+    Serial.println("Bootloader restart cancelled: USB power removed");
     return;
   }
 
-  if (strcmp(method, "device.status") == 0) {
+  Serial.println("BOOTLOADER_RESTART");
+  Serial.flush();
+  usb_persist_restart(RESTART_BOOTLOADER);
+}
+#endif
+
+bool CodexMicroBle::handleRpc(const JsonDocument& request) {
+  const JsonObjectConst requestObject = request.as<JsonObjectConst>();
+  const char* method = requestObject["method"] | "";
+  const JsonVariantConst id = requestObject["id"];
+  const JsonVariantConst params = requestObject["params"];
+  const host_rpc::Method supportedMethod = host_rpc::classify(requestObject);
+  Serial.printf("RPC method=%s\n", method);
+
+  if (supportedMethod == host_rpc::Method::SystemVersion) {
+    StaticJsonDocument<128> resultDoc;
+    resultDoc["version"] = kFirmwareVersion;
+    sendResult(id, resultDoc.as<JsonVariantConst>());
+    return true;
+  }
+
+  if (supportedMethod == host_rpc::Method::DeviceStatus) {
     StaticJsonDocument<256> resultDoc;
     resultDoc["version"] = kFirmwareVersion;
     resultDoc["profile_index"] = 0;
@@ -375,23 +813,24 @@ void CodexMicroBle::handleRpc(const JsonDocument& request) {
     resultDoc["battery"] = batteryPercentage_;
     resultDoc["is_charging"] = charging_;
     sendResult(id, resultDoc.as<JsonVariantConst>());
-    return;
+    return true;
   }
 
-  if (strcmp(method, "v.oai.thstatus") == 0 && params.is<JsonArrayConst>()) {
+  if (supportedMethod == host_rpc::Method::ThreadStatus) {
     updateThreadLighting(params.as<JsonArrayConst>());
     sendSuccess(id);
-    return;
+    return true;
   }
 
-  if (strcmp(method, "v.oai.rgbcfg") == 0 && params.is<JsonObjectConst>()) {
+  if (supportedMethod == host_rpc::Method::RgbConfig) {
     sendSuccess(id);
-    return;
+    return true;
   }
 
-  if (strcmp(method, "lights.preview") == 0 || strcmp(method, "host.focused_app") == 0) {
+  if (supportedMethod == host_rpc::Method::LightsPreview ||
+      supportedMethod == host_rpc::Method::HostFocusedApp) {
     sendSuccess(id);
-    return;
+    return true;
   }
 
   StaticJsonDocument<192> response;
@@ -402,6 +841,7 @@ void CodexMicroBle::handleRpc(const JsonDocument& request) {
   String json;
   serializeJson(response, json);
   sendJson(json);
+  return false;
 }
 
 void CodexMicroBle::sendResult(JsonVariantConst id, JsonVariantConst result) {
@@ -454,6 +894,7 @@ void CodexMicroBle::updateThreadLighting(JsonArrayConst values) {
     light.color = value["c"] | light.color;
     light.brightness = value["b"] | light.brightness;
     light.effect = value["e"] | light.effect;
+    light.speed = value["s"] | light.speed;
   }
   state_.dirty = true;
   xSemaphoreGive(stateMutex_);

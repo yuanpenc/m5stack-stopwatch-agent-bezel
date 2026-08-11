@@ -11,12 +11,15 @@ Codex 额度仪表盘。
 
 - 显示 Agent 状态。
 - 显示本周 Codex 剩余额度和 reset 倒计时。
+- 显示电池、充电/Dock 状态，并区分 Codex、BLE 和额度同步是否真正健康。
 - Agent 完成时变为绿色并播放柔和提示音。
 - 左侧实体键用于按住说话（Push to talk）。
 - 右侧实体键用于进入或退出 Voice Chat。
 - 点击中央大圆盘发送当前输入。
 - 在全屏向上、右、下、左滑动，模拟 Codex Micro 摇杆的四个可自定义方向。
 - 实体键和触屏操作提供振动反馈。
+- 支持 BLE 保持在线的桌面休眠，以及长按确认的旅行关机。
+- 可选地通过 USB 把 StopWatch 自带麦克风提供给 Mac。
 
 控制操作使用 Codex Micro 兼容的 BLE HID 通道。额度数据则由 Mac 上的本地
 companion 通过项目自有的 BLE GATT 通道单独发送。手表不会保存 OpenAI token。
@@ -25,7 +28,8 @@ companion 通过项目自有的 BLE GATT 通道单独发送。手表不会保存
 
 - **M5Stack StopWatch Dev Kit，SKU C152**。本移植不支持其他 M5Stack 设备。
 - 一台支持蓝牙的 Mac。
-- 首次刷机所需的数据 USB-C 线；日常使用走无线连接。
+- 首次刷机所需的数据 USB-C 线；默认版本日常使用走无线连接，可选麦克风版本在
+  录音时需要保持 USB 连接。
 - 支持 Codex Micro 的 ChatGPT Desktop，以及已经登录的本地 Codex 会话。
 - 本地 Codex App、Codex CLI，或其他能够运行终端命令的本地 coding agent。
 
@@ -74,6 +78,34 @@ folder。仓库应该放在准备与 StopWatch 配对的那台 Mac 上。
 用户不需要在提示词里解释所有实现细节。Claude Code 等其他本地 coding agent
 也可以按照同一套说明工作，但本项目默认并主要面向 Codex。
 
+### 可选：把 StopWatch 作为 USB 麦克风（实验性）
+
+默认版本仍使用 Mac 的麦克风。如果希望使用 StopWatch 自带麦克风，可以让 Codex
+安装独立的 `usb-mic` 构建。它在 macOS 中显示为 **Codex StopWatch Mic**，
+格式是 48 kHz、16-bit、mono 输入。这个版本不提供 USB
+speaker；Mac 未在传输麦克风音频时，手表仍会播放本地 Agent 完成提示音；录音流
+活跃时则会跳过提示音。固件仍然包含 BLE 控制和仪表盘。
+
+在 Codex 中打开仓库后，粘贴：
+
+```text
+请把可选 USB 麦克风版本安装到我的 M5Stack StopWatch C152 真机上。
+先完整阅读 AGENTS.md 和 README.zh-CN.md。使用 `pio run -d usb-mic` 构建隔离的
+usb-mic PlatformIO 项目，不要增加 USB speaker/output endpoint；可以保留现有的
+仅在空闲时播放的本地完成提示音。刷机前遵守文档中的官方恢复
+路径和准确端口确认规则。
+刷机后确认 macOS 输入设备中出现“Codex StopWatch Mic”，并帮我做一次很短的
+本地录音测试。不要把录音、设备标识或本机路径提交到 Git。
+```
+
+安装后，在 **系统设置 > 声音 > 输入** 中选择 **Codex StopWatch Mic**。
+ChatGPT Desktop 的 Push to talk 和 Voice Chat 触发动作仍通过蓝牙发送，语音样本则
+通过 USB 进入 Mac。
+
+两个版本都使用 Bluedroid 承载 Codex Micro BLE。如果切换固件后 macOS 仍缓存旧的
+HID descriptor，请仅忽略属于 StopWatch 的 **Codex Micro**，然后重新配对。不要
+删除另外连接的实体 Codex Micro 键盘。
+
 ### 第四步：完成可见的系统授权
 
 Codex 会完成终端工作，但 macOS 仍可能要求用户亲自：
@@ -95,10 +127,26 @@ Codex 会完成终端工作，但 macOS 仍可能要求用户亲自：
 | 向右滑动 | 摇杆右 | 用户自定义 |
 | 向下滑动 | 摇杆下 | 用户自定义 |
 | 向左滑动 | 摇杆左 | 用户自定义 |
+| 点按红色电源键 | 桌面休眠 / 唤醒 | BLE 提醒保持在线 |
+| 快速双击红色电源键 | 旅行模式关机 | 电源键或接入 USB 后冷启动 |
+| 按住中央表盘 6 秒 | 带警告的备用旅行关机 | 电源键或接入 USB 后冷启动 |
 
 开发时使用的 ChatGPT Desktop 版本只显示一个 Mic key 设置，没有独立的
 `ACT10`/`ACT11` 配置。因此右侧实体键有意映射为可配置的 Command Key 4，
 而不是第二个 Mic switch。
+
+电池供电时，屏幕会在两分钟后变暗、五分钟后进入桌面休眠；接入 USB 电源后会
+自动进入 Dock Mode，并把这两个时间延长到十分钟和三十分钟。默认无线固件会在
+桌面休眠时关闭 AMOLED/音频/马达共用电源轨，但保持 BLE 在线；可选 USB 麦克风
+固件为了继续录音，会保持共用电源轨开启，并使用亮度归零式桌面休眠。旅行模式使用
+PM1 真关机，因此在
+按电源键或接入 USB 重新启动前，设备会错过 Agent 在线提醒。红键双击由固件先
+显示关机提示并释放 HID，再请求 PM1 关机；长按红色电源键仍保留为硬件恢复 /
+下载模式手势。中央表盘六秒长按是一个更难误触、带屏幕警告的备用入口。
+
+原生渲染器和两种固件已经通过当前的构建检查，但这些检查无法验证真实电源切换。
+C152 真机的休眠 / 唤醒与关机循环测试仍待完成；在完成验证清单前，请把相关时间与
+唤醒行为视为实验性能力。
 
 ## 额度 companion 与隐私
 
@@ -144,6 +192,18 @@ CODEX_MICRO_STOPWATCH_READY
 随后在 macOS 中配对 **Codex Micro**，打开 ChatGPT Desktop，并按照上表配置。
 如果 macOS 缓存了旧 HID descriptor，请在 Mac 上忽略该设备、重启手表，再重新
 配对。
+
+如需可选的纯输入 USB 麦克风版本，请遵守相同的准确端口确认和恢复步骤，然后使用：
+
+```sh
+pio run -d usb-mic
+pio run -d usb-mic -e m5stack-stopwatch-usb-mic --target upload \
+  --upload-port /dev/cu.YOUR_C152_PORT
+```
+
+它启动后，普通 USB 串口会被音频接口取代。以后更新时，Codex 可以通过 companion
+的加密 `--enter-bootloader` 命令让设备自动进入下载模式，再核对新出现的串口；
+M5Stack 的手动恢复手势仍作为兜底。
 
 ### 手动运行额度 companion
 
