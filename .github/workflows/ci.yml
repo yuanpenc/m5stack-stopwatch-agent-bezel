@@ -73,6 +73,7 @@ jobs:
           swiftc -warnings-as-errors -typecheck scripts/hid_inspect.swift
           swiftc -warnings-as-errors -typecheck scripts/hid_rpc_probe.swift
           swiftc -warnings-as-errors -typecheck scripts/hid_input_probe.swift
+          swift scripts/hid_rpc_probe.swift --self-test
       - name: Type-check microphone capture helper
         run: swiftc -warnings-as-errors -typecheck scripts/usb_mic_capture.swift
       - name: Build release companion

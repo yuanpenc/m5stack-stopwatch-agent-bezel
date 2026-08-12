@@ -22,7 +22,12 @@ def main() -> int:
     parser.add_argument("port")
     parser.add_argument("--seconds", type=float, default=30.0)
     parser.add_argument("--no-reset", action="store_true")
+    parser.add_argument("--expect")
     args = parser.parse_args()
+
+    expected = args.expect.encode() if args.expect is not None else None
+    search_tail = b""
+    found = expected is None
 
     fd = os.open(args.port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
     try:
@@ -49,8 +54,18 @@ def main() -> int:
             if chunk:
                 sys.stdout.buffer.write(chunk)
                 sys.stdout.buffer.flush()
+                if expected is not None:
+                    searchable = search_tail + chunk
+                    if expected in searchable:
+                        found = True
+                        break
+                    overlap = max(0, len(expected) - 1)
+                    search_tail = searchable[-overlap:] if overlap else b""
     finally:
         os.close(fd)
+    if not found:
+        print(f"Expected serial marker not observed: {args.expect}", file=sys.stderr)
+        return 1
     return 0
 
 

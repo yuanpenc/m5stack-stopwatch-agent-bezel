@@ -12,8 +12,8 @@ API key, or put an account token on the watch.
 
 Requirements:
 
-- macOS 13 or newer;
-- the Swift toolchain included with current Xcode Command Line Tools;
+- macOS 14 or newer;
+- Swift 5.10 or newer (Xcode 15.3 Command Line Tools or newer);
 - a locally available Codex executable or an explicit `--codex-path`.
 
 ```sh
@@ -44,6 +44,9 @@ For continuous refreshes while the terminal remains open:
 .build/release/codex-watch-companion \
   --device-id YOUR_COREBLUETOOTH_UUID --watch --interval 60
 ```
+
+Keep this `--watch` process running whenever automatic startup is not installed;
+otherwise the dashboard will correctly mark quota sync stale.
 
 Pass `--codex-path /absolute/path/to/codex` when automatic executable discovery
 does not select the intended local Codex installation.
@@ -98,6 +101,13 @@ value:
 - `__CODEX_PATH__`: intended local Codex executable;
 - `__DEVICE_UUID__`: UUID printed by demo discovery on this Mac;
 - `__LOG_DIRECTORY__`: a private local log directory.
+
+Codex should lint the generated plist, verify the ad-hoc-signed app with
+`codesign --verify --deep --strict`, load it only after user approval, and use
+`launchctl print gui/$UID/io.github.codex-micro-stopwatch.companion` plus one
+real quota/reset update as the health check. To uninstall, boot out that exact
+per-user LaunchAgent before removing only the generated local app, plist, and
+logs; never delete or edit the tracked templates.
 
 Do not edit the tracked example in place. Never commit the generated plist,
 app, UUID, usernames, home paths, or logs. The root README contains the

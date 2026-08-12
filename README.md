@@ -31,9 +31,13 @@ service. The watch never stores an OpenAI token.
 
 - **M5Stack StopWatch Dev Kit, SKU C152**. Other M5Stack devices are not
   supported by this port.
-- A Mac with Bluetooth.
+- A Bluetooth-capable Mac running macOS 14 or newer.
 - A data-capable USB-C cable for the first flash. Normal use is wireless; the
   optional microphone build keeps the cable connected while recording.
+- Swift 5.10 or newer (Xcode 15.3 Command Line Tools or newer) and PlatformIO
+  Core.
+  Codex can install a missing tool after explaining the change and obtaining
+  approval.
 - ChatGPT Desktop with Codex Micro support and an existing signed-in Codex
   session.
 - The local Codex app, CLI, or another local coding agent capable of running
@@ -74,10 +78,13 @@ autonomously, but follow these safety rules:
    before attempting an upload.
 5. Immediately before flashing, report the exact /dev/cu.* port you resolved
    and ask me to confirm that one destructive device action.
-6. After flashing, verify the CODEX_MICRO_STOPWATCH_READY serial marker and
-   guide me through macOS Bluetooth pairing.
-7. Help me configure ChatGPT Desktop: left button = Push to talk, Command Key 4
-   = Toggle voice chat, center = Send, and let me choose the four swipe actions.
+6. After flashing, verify the CODEX_MICRO_STOPWATCH_READY marker with
+   `python3 scripts/serial_probe.py <the exact port> --seconds 30 --expect
+   CODEX_MICRO_STOPWATCH_READY`, then guide me
+   through macOS Bluetooth pairing.
+7. Help me grant ChatGPT Input Monitoring and configure ChatGPT Desktop: left
+   button = Push to talk, Command Key 4 = Toggle voice chat, center = Send, and
+   let me choose the four swipe actions.
 8. Build the Swift quota companion from source. Use demo discovery to find this
    Mac's CoreBluetooth UUID, then bind real quota writes to that exact device.
 9. If I approve automatic startup, create the local app wrapper and LaunchAgent
@@ -109,8 +116,10 @@ Read AGENTS.md and README.md first. Build the isolated usb-mic PlatformIO
 project with `pio run -d usb-mic`; do not add a USB speaker/output endpoint.
 The existing local-only idle completion chime may remain enabled. Follow
 the documented factory-recovery and exact-port confirmation rules before
-flashing. Afterward, verify that macOS lists "Codex StopWatch Mic" as an
-input device and help me make a short local
+flashing. This target has a large isolated toolchain, so explain the first-build
+download, time, and disk cost before starting. Afterward, do not look for the
+default serial READY marker: verify that macOS lists "Codex StopWatch Mic" as
+an input device, verify BLE/HID separately, and help me make a short local
 recording test. Do not commit the recording, device identifiers, or local paths.
 ```
 
@@ -120,8 +129,9 @@ actions over Bluetooth, while voice samples travel through USB.
 
 Both images use Bluedroid for the Codex Micro BLE transport. If macOS keeps an
 older HID descriptor after switching images, forget only the StopWatch's
-**Codex Micro** entry and pair it again. Do not remove a separately connected
-physical Codex Micro keyboard.
+**Codex Micro** entry and pair it again. This port supports one active Micro at
+a time: keep a real Codex Micro's pairing record, but disconnect or power it
+off while installing, validating, or using the StopWatch.
 
 ### 4. Finish the visible permission steps
 
@@ -130,8 +140,10 @@ Codex will handle the terminal work, but macOS may still require the user to:
 1. Approve installation of a missing build tool.
 2. Confirm the exact device immediately before flashing.
 3. Pair **Codex Micro** in **System Settings > Bluetooth**.
-4. Approve Bluetooth access for the locally built companion.
-5. Configure the actions in **ChatGPT Desktop > Settings > Codex Micro**.
+4. Allow **ChatGPT** in **System Settings > Privacy & Security > Input
+   Monitoring**, then quit and reopen ChatGPT.
+5. Approve Bluetooth access for the locally built companion.
+6. Configure the actions in **ChatGPT Desktop > Settings > Codex Micro**.
 
 ## Controls
 
@@ -214,6 +226,13 @@ Never copy a port from another user's documentation. A successful boot prints:
 CODEX_MICRO_STOPWATCH_READY
 ```
 
+Verify that marker against the same resolved port:
+
+```sh
+python3 scripts/serial_probe.py /dev/cu.YOUR_C152_PORT --seconds 30 \
+  --expect CODEX_MICRO_STOPWATCH_READY
+```
+
 Pair **Codex Micro** in macOS, open ChatGPT Desktop, and configure the controls
 from the table above. If macOS cached an older HID descriptor, forget the device
 on the Mac, restart the watch, and pair it again.
@@ -228,6 +247,9 @@ pio run -d usb-mic -e m5stack-stopwatch-usb-mic --target upload \
 ```
 
 Once it boots, the normal USB serial port is replaced by the audio interface.
+The first clean USB-mic build downloads and builds a separate ESP32 toolchain;
+it can take several minutes and use substantial temporary disk space. The
+absence of `CODEX_MICRO_STOPWATCH_READY` over USB is expected for this image.
 For later updates, Codex can use the companion's encrypted
 `--enter-bootloader` command and then verify the newly enumerated serial port.
 M5Stack's manual recovery gesture remains the fallback.
@@ -264,7 +286,19 @@ user configuration or prebuilt companion app.
 
 - Restart the watch and scan again.
 - Forget any old **Codex Micro** pairing before retrying.
-- Confirm the firmware reached `CODEX_MICRO_STOPWATCH_READY` over serial.
+- For the default image, confirm the firmware reached
+  `CODEX_MICRO_STOPWATCH_READY` over serial. For the USB-mic image, verify its
+  audio interface and BLE/HID independently because it has no normal USB serial
+  console.
+
+### ChatGPT sees the Micro but the controls do nothing
+
+- Allow ChatGPT under **System Settings > Privacy & Security > Input
+  Monitoring**, then quit and reopen it.
+- Disconnect any other active Codex Micro; this port supports one active Micro
+  at a time.
+- Temporarily quit keyboard remappers or security tools that may claim or block
+  the HID device, then reconnect it.
 
 ### The right button changes UI but does not open Voice Chat
 
@@ -280,11 +314,13 @@ button sends `ACT09`; it is not `ACT11` in this port.
 
 ## Acknowledgements, license, and trademarks
 
-The Codex Micro compatibility layer was developed with
+This project adapts portions of the BLE compatibility layer from
 [`imliubo/codex-micro-4-core2`](https://github.com/imliubo/codex-micro-4-core2)
-as an implementation reference. We thank its author and preserve the applicable
-MIT attribution in [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md). Space Mono
-remains under the SIL Open Font License 1.1 in `assets/fonts/OFL.txt`.
+under the MIT License. We thank its author and preserve the applicable
+attribution in [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md). The StopWatch UI,
+power behavior, quota companion, and optional USB microphone are this port's
+own additions. Space Mono remains under the SIL Open Font License 1.1 in
+`assets/fonts/OFL.txt`.
 
 OpenAI's documentation for the original device is available at
 [Codex Micro](https://learn.chatgpt.com/docs/features/codex-micro), and the local

@@ -36,7 +36,7 @@
 7. Set **Microphone key** to **Push to talk**.
 8. Assign Command Key 4 to **Toggle voice chat**, then verify left PTT and right
    Voice Chat with the Mac mic.
-9. Verify all six Agent status colors and breathing updates.
+9. Verify all six Agent status colors and the focused-slot ring.
 10. Write a synthetic quota snapshot through CoreBluetooth and verify countdown.
 11. Only then connect the companion to the live App Server rate-limit feed.
 12. Verify the battery percentage, charging bolt, Dock color, and all four
@@ -89,11 +89,11 @@ be reported independently:
    `excessive zero length packets` for the StopWatch. Do not use the ratio of
    ffmpeg payload duration to wall time as a pass/fail signal: AVFoundation on
    current macOS reports the same reduced ratio for known-good 48 kHz devices.
-5. Run `scripts/hid_inspect.swift` to require exactly one `303A:8360` vendor
+5. Run `swift scripts/hid_inspect.swift` to require exactly one `303A:8360` vendor
    HID interface with output report 6, then confirm
-   `scripts/hid_rpc_probe.swift` can exchange a status RPC. Generic BLE pairing
-   alone is not a successful HID validation.
-6. Run `scripts/hid_input_probe.swift` and require at least one real input
+   `swift scripts/hid_rpc_probe.swift` can exchange and validate a status RPC.
+   Generic BLE pairing alone is not a successful HID validation.
+6. Run `swift scripts/hid_input_probe.swift` and require at least one real input
    report from a physical or touch control.
 7. Re-check BLE pairing, both physical buttons, touch Send, swipes, Agent
    status, quota updates, and haptics. The local completion chime may play only

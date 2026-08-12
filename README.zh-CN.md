@@ -27,9 +27,11 @@ companion 通过项目自有的 BLE GATT 通道单独发送。手表不会保存
 ## 使用要求
 
 - **M5Stack StopWatch Dev Kit，SKU C152**。本移植不支持其他 M5Stack 设备。
-- 一台支持蓝牙的 Mac。
+- 一台支持蓝牙、运行 macOS 14 或更高版本的 Mac。
 - 首次刷机所需的数据 USB-C 线；默认版本日常使用走无线连接，可选麦克风版本在
   录音时需要保持 USB 连接。
+- Swift 5.10 或更高版本（Xcode 15.3 Command Line Tools 或更新版本）和
+  PlatformIO Core。缺少工具时，Codex 会先解释将要进行的安装并征得同意。
 - 支持 Codex Micro 的 ChatGPT Desktop，以及已经登录的本地 Codex 会话。
 - 本地 Codex App、Codex CLI，或其他能够运行终端命令的本地 coding agent。
 
@@ -63,9 +65,10 @@ folder。仓库应该放在准备与 StopWatch 配对的那台 Mac 上。
    access token 或其他凭据。
 4. 先向我展示 M5Stack 官方恢复出厂固件链接，再完成固件编译。
 5. 刷机前再次解析并报告准确的 /dev/cu.* 端口，只针对这一次设备写入征求确认。
-6. 刷机后验证 CODEX_MICRO_STOPWATCH_READY 串口标记，并引导我完成 macOS 蓝牙配对。
-7. 帮我配置 ChatGPT Desktop：左键 = Push to talk，Command Key 4 = Toggle voice
-   chat，中间 = Send；四个滑动方向的动作由我选择。
+6. 刷机后使用 `python3 scripts/serial_probe.py <准确端口> --seconds 30 --expect
+   CODEX_MICRO_STOPWATCH_READY` 验证启动标记，再引导我完成 macOS 蓝牙配对。
+7. 帮我给 ChatGPT 开启 Input Monitoring，并配置 ChatGPT Desktop：左键 = Push to
+   talk，Command Key 4 = Toggle voice chat，中间 = Send；四个滑动方向由我选择。
 8. 从源码编译 Swift 额度 companion。先用 demo discovery 找出这台 Mac 看到的
    CoreBluetooth UUID，再把真实额度写入绑定到这一台设备。
 9. 如果我同意开机自动运行，只在本机生成 app wrapper 和 LaunchAgent。路径、UUID、
@@ -93,9 +96,10 @@ speaker；Mac 未在传输麦克风音频时，手表仍会播放本地 Agent �
 先完整阅读 AGENTS.md 和 README.zh-CN.md。使用 `pio run -d usb-mic` 构建隔离的
 usb-mic PlatformIO 项目，不要增加 USB speaker/output endpoint；可以保留现有的
 仅在空闲时播放的本地完成提示音。刷机前遵守文档中的官方恢复
-路径和准确端口确认规则。
-刷机后确认 macOS 输入设备中出现“Codex StopWatch Mic”，并帮我做一次很短的
-本地录音测试。不要把录音、设备标识或本机路径提交到 Git。
+路径和准确端口确认规则。这个 target 使用独立而且较大的工具链；开始前先说明首次
+构建所需的下载、时间和磁盘空间。刷机后不要寻找默认固件的串口 READY 标记，而要
+确认 macOS 输入设备中出现“Codex StopWatch Mic”、独立验证 BLE/HID，并帮我做一次
+很短的本地录音测试。不要把录音、设备标识或本机路径提交到 Git。
 ```
 
 安装后，在 **系统设置 > 声音 > 输入** 中选择 **Codex StopWatch Mic**。
@@ -103,8 +107,9 @@ ChatGPT Desktop 的 Push to talk 和 Voice Chat 触发动作仍通过蓝牙发�
 通过 USB 进入 Mac。
 
 两个版本都使用 Bluedroid 承载 Codex Micro BLE。如果切换固件后 macOS 仍缓存旧的
-HID descriptor，请仅忽略属于 StopWatch 的 **Codex Micro**，然后重新配对。不要
-删除另外连接的实体 Codex Micro 键盘。
+HID descriptor，请仅忽略属于 StopWatch 的 **Codex Micro**，然后重新配对。本项目
+一次只支持一个处于连接状态的 Micro：可以保留真实 Codex Micro 的配对记录，但安装、
+验证和使用 StopWatch 时应先将实体键盘断开或关机。
 
 ### 第四步：完成可见的系统授权
 
@@ -113,8 +118,10 @@ Codex 会完成终端工作，但 macOS 仍可能要求用户亲自：
 1. 同意安装缺失的构建工具。
 2. 在刷机前确认准确的设备端口。
 3. 在 **系统设置 > 蓝牙** 中配对 **Codex Micro**。
-4. 允许本机生成的 companion 使用蓝牙。
-5. 在 **ChatGPT Desktop > Settings > Codex Micro** 中配置按键动作。
+4. 在 **系统设置 > 隐私与安全性 > 输入监控** 中允许 **ChatGPT**，然后退出并
+   重新打开 ChatGPT。
+5. 允许本机生成的 companion 使用蓝牙。
+6. 在 **ChatGPT Desktop > Settings > Codex Micro** 中配置按键动作。
 
 ## 控制方式
 
@@ -189,6 +196,13 @@ pio run -e m5stack-stopwatch --target upload --upload-port /dev/cu.YOUR_C152_POR
 CODEX_MICRO_STOPWATCH_READY
 ```
 
+请用同一个已确认的串口核对该标记：
+
+```sh
+python3 scripts/serial_probe.py /dev/cu.YOUR_C152_PORT --seconds 30 \
+  --expect CODEX_MICRO_STOPWATCH_READY
+```
+
 随后在 macOS 中配对 **Codex Micro**，打开 ChatGPT Desktop，并按照上表配置。
 如果 macOS 缓存了旧 HID descriptor，请在 Mac 上忽略该设备、重启手表，再重新
 配对。
@@ -201,9 +215,11 @@ pio run -d usb-mic -e m5stack-stopwatch-usb-mic --target upload \
   --upload-port /dev/cu.YOUR_C152_PORT
 ```
 
-它启动后，普通 USB 串口会被音频接口取代。以后更新时，Codex 可以通过 companion
-的加密 `--enter-bootloader` 命令让设备自动进入下载模式，再核对新出现的串口；
-M5Stack 的手动恢复手势仍作为兜底。
+它启动后，普通 USB 串口会被音频接口取代。首次干净构建会下载并编译一套独立的
+ESP32 工具链，可能需要几分钟和较多临时磁盘空间。这个固件没有普通 USB 串口，
+因此找不到 `CODEX_MICRO_STOPWATCH_READY` 属于正常现象。以后更新时，Codex 可以
+通过 companion 的加密 `--enter-bootloader` 命令让设备自动进入下载模式，再核对
+新出现的串口；M5Stack 的手动恢复手势仍作为兜底。
 
 ### 手动运行额度 companion
 
@@ -230,11 +246,18 @@ LaunchAgent。仓库只提供通用模板，不包含任何用户生成的配置
 - 断开其他开发板，重新列出端口，再只连接 C152。
 - 如果现有固件无法启动，按照 M5Stack 官方 download mode 和恢复出厂流程操作。
 
+### ChatGPT 能看到 Micro，但按键没有作用
+
+- 在 **系统设置 > 隐私与安全性 > 输入监控** 中允许 ChatGPT，然后退出并重新打开。
+- 断开其他正在工作的 Codex Micro；本项目一次只支持一个 active Micro。
+- 暂时退出可能占用或拦截 HID 的键盘 remapper 或安全工具，再重新连接。
+
 ### 蓝牙设置中看不到 Codex Micro
 
 - 重启手表后重新扫描。
 - 先删除 Mac 上已有的旧 **Codex Micro** 配对。
-- 通过串口确认固件已经输出 `CODEX_MICRO_STOPWATCH_READY`。
+- 默认固件应通过串口确认 `CODEX_MICRO_STOPWATCH_READY`；USB 麦克风固件没有普通
+  USB 串口，应分别验证音频接口与 BLE/HID。
 
 ### 右键界面有反应，但没有进入 Voice Chat
 
@@ -249,10 +272,11 @@ LaunchAgent。仓库只提供通用模板，不包含任何用户生成的配置
 
 ## 致谢、许可证与商标
 
-本项目在实现 Codex Micro 兼容层时参考了
-[`imliubo/codex-micro-4-core2`](https://github.com/imliubo/codex-micro-4-core2)。
-感谢原作者的工作；相关 MIT attribution 保留在 [LICENSE](LICENSE) 和
-[NOTICE.md](NOTICE.md) 中。Space Mono 继续使用 `assets/fonts/OFL.txt` 中的 SIL
+本项目在 MIT License 下改编了
+[`imliubo/codex-micro-4-core2`](https://github.com/imliubo/codex-micro-4-core2)
+的部分 BLE 兼容层。感谢原作者的工作；相关 attribution 保留在 [LICENSE](LICENSE)
+和 [NOTICE.md](NOTICE.md) 中。StopWatch UI、电源逻辑、额度 companion 和可选 USB
+麦克风是本移植新增的部分。Space Mono 继续使用 `assets/fonts/OFL.txt` 中的 SIL
 Open Font License 1.1。
 
 OpenAI 关于原始设备的说明见

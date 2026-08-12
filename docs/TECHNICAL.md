@@ -64,11 +64,12 @@ the host. The center touch target uses Send key `ACT12`.
 ## Connection and power telemetry
 
 `BLE ONLY` is derived from the BLE server's reconciled live connection count.
-`CODEX LIVE` additionally requires a complete, parseable host RPC with a
-non-empty method in the current 0-to-connected epoch and expires after five
-minutes without another host RPC. The companion's private GATT write never
-counts as Codex liveness. Quota data independently becomes `SYNC STALE` after
-three minutes; invalid JSON does not refresh that timer.
+`CODEX LIVE` additionally requires a supported host RPC with valid parameters
+to be successfully handled in the current 0-to-connected epoch, and expires
+after five minutes without another accepted RPC. Unknown or malformed methods
+do not count. The companion's private GATT write never counts as Codex
+liveness. Quota data independently becomes `SYNC STALE` after three minutes;
+invalid JSON does not refresh that timer.
 
 Battery level is sampled every 30 seconds. Charge state and VIN are sampled
 every two seconds. Dock detection uses two consecutive samples with 4.0 V
@@ -107,7 +108,7 @@ configured in this release.
   overfilling the FIFO during its USB Audio lock-delay window.
 - The USB microphone configures the ES8311 for 24 dB analog PGA gain, 24 dB
   ADC scale, +6 dB ADC digital volume, and unity M5Unified software gain. The
-  firmware writes and reads back all three codec gain registers after
+  firmware writes and reads back all four codec gain registers after
   M5Unified's one-time sample-rate restart. This preserves the nominal level
   while giving speech peaks more analog headroom than the previous profile.
 - Pairing is BLE `Just Works` bonding.

@@ -27,6 +27,8 @@
   selected.
 - Begin with read-only checks. Explain any missing dependency before installing
   it, and use the narrowest standard installation method available on the Mac.
+- Require macOS 14 or newer, Swift 5.10 or newer, and PlatformIO Core. Treat
+  dependency downloads and system permission changes as user-visible actions.
 - Build the `m5stack-stopwatch` PlatformIO environment before flashing.
 - For the optional microphone install, build the isolated `usb-mic` project,
   explain that the local completion chime is skipped while the host is
@@ -34,9 +36,15 @@
   from BLE behavior.
 - Resolve the exact newly connected `/dev/cu.*` device immediately before an
   upload. Report it to the user and obtain confirmation before flashing.
-- After flashing, verify the serial marker
-  `CODEX_MICRO_STOPWATCH_READY`, then guide the user through macOS Bluetooth
-  pairing and ChatGPT Desktop's Codex Micro settings.
+- After flashing the default target, verify the serial marker
+  `CODEX_MICRO_STOPWATCH_READY` on the same exact port with
+  `python3 scripts/serial_probe.py <port> --seconds 30 --expect
+  CODEX_MICRO_STOPWATCH_READY`. The USB-mic image has
+  no normal USB serial console; verify its UAC enumeration, short capture, BLE,
+  and HID/RPC separately instead.
+- Require ChatGPT Input Monitoring on macOS. Preserve another physical Micro's
+  pairing record, but disconnect or power it off: this port supports only one
+  active Micro during installation, validation, and normal use.
 - Build the quota companion from source. Use demo discovery to obtain this
   Mac's CoreBluetooth UUID, require that UUID for real writes, and store it only
   in local ignored output or the user's `~/Library` files.

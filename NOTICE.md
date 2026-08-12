@@ -62,11 +62,14 @@ BLE pairing uses a "Just Works" flow without passkey authentication. Use the
 device only in a trusted environment and remove stale pairings from both the
 host and device when appropriate.
 
-This firmware does not connect directly to OpenAI and does not stream the
-StopWatch microphone. It does send button events, directional actions, and
-device status to the paired computer. The paired operating system and ChatGPT
-Desktop control how those events, the computer microphone, and task data are
-processed. Review their privacy and security settings separately.
+This firmware does not connect directly to OpenAI. The default image does not
+capture or stream the StopWatch microphone. When a user explicitly installs and
+selects the optional `usb-mic` image, microphone PCM travels over the physical
+USB cable to the local Mac; it does not travel through BLE, the companion, or a
+project-operated network service. The firmware also sends button events,
+directional actions, and device status to the paired computer. The paired
+operating system and host applications control how local input is processed.
+Review their privacy and security settings separately.
 
 ## No warranty
 

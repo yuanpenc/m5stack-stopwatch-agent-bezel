@@ -51,14 +51,15 @@ Connection and quota freshness are deliberately independent:
 
 - `OFFLINE`: no BLE GATT connection;
 - `BLE ONLY`: at least one BLE connection, but no recent complete host HID RPC;
-- `CODEX LIVE`: a complete host RPC was parsed during the current connection
-  epoch within the last five minutes;
+- `CODEX LIVE`: a supported host RPC with a valid parameter shape was handled
+  during the current connection epoch within the last five minutes;
 - `SYNC STALE`: no accepted quota write arrived within three minutes. This can
   appear at the same time as `CODEX LIVE`.
 
-Only a successfully parsed HID RPC with a non-empty method proves Codex host
-activity. Outgoing keys, raw fragments, the quota companion, and a generic BLE
-connection do not promote the link to `CODEX LIVE`.
+Only a supported, successfully handled HID RPC with a valid parameter shape
+proves Codex host activity. Unknown methods, malformed parameters, outgoing
+keys, raw fragments, the quota companion, and a generic BLE connection do not
+promote the link to `CODEX LIVE`.
 
 ## Power lifecycle
 
