@@ -3,6 +3,7 @@
 .vscode/
 .DS_Store
 .build/
+.worktrees/
 *.dSYM/
 __pycache__/
 *.py[cod]
