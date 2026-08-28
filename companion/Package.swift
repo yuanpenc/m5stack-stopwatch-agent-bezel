@@ -10,5 +10,9 @@ let package = Package(
     ],
     targets: [
         .executableTarget(name: "CodexWatchCompanion"),
+        .testTarget(
+            name: "CodexWatchCompanionTests",
+            dependencies: ["CodexWatchCompanion"]
+        ),
     ]
 )
