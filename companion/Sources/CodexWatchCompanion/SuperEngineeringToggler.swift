@@ -6,13 +6,15 @@ struct ApplicationIdentity: Equatable, Hashable {
     let bundleIdentifier: String
 }
 
+@MainActor
 protocol WorkspaceApplications: AnyObject {
     var frontmost: ApplicationIdentity? { get }
     func runningApplication(bundleIdentifier: String) -> ApplicationIdentity?
     @discardableResult func activate(_ identity: ApplicationIdentity) -> Bool
-    func launchAndActivate(bundleIdentifier: String, completion: @escaping (Bool) -> Void)
+    func launchAndActivate(bundleIdentifier: String, completion: @MainActor @escaping (Bool) -> Void)
 }
 
+@MainActor
 final class NSWorkspaceApplications: WorkspaceApplications {
     private let workspace: NSWorkspace
 
@@ -34,10 +36,10 @@ final class NSWorkspaceApplications: WorkspaceApplications {
         guard let application = NSRunningApplication(processIdentifier: identity.processIdentifier),
               application.bundleIdentifier == identity.bundleIdentifier,
               !application.isTerminated else { return false }
-        return application.activate(options: [.activateIgnoringOtherApps])
+        return application.activate(options: [])
     }
 
-    func launchAndActivate(bundleIdentifier: String, completion: @escaping (Bool) -> Void) {
+    func launchAndActivate(bundleIdentifier: String, completion: @MainActor @escaping (Bool) -> Void) {
         guard let url = workspace.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
             completion(false)
             return
@@ -46,7 +48,9 @@ final class NSWorkspaceApplications: WorkspaceApplications {
         configuration.activates = true
         workspace.openApplication(at: url, configuration: configuration) { application, _ in
             DispatchQueue.main.async {
-                completion(application?.bundleIdentifier == bundleIdentifier)
+                MainActor.assumeIsolated {
+                    completion(application?.bundleIdentifier == bundleIdentifier)
+                }
             }
         }
     }
@@ -60,6 +64,7 @@ final class NSWorkspaceApplications: WorkspaceApplications {
     }
 }
 
+@MainActor
 final class SuperEngineeringToggler {
     static let targetBundleIdentifier = "com.zarifpour.superconductor"
     static let companionBundleIdentifier = "io.github.codex-micro-stopwatch.companion"

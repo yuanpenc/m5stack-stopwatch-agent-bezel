@@ -1,6 +1,7 @@
 import XCTest
 @testable import CodexWatchCompanion
 
+@MainActor
 final class WorkspaceStub: WorkspaceApplications {
     var frontmost: ApplicationIdentity?
     var runningByBundleID: [String: ApplicationIdentity] = [:]
@@ -19,12 +20,13 @@ final class WorkspaceStub: WorkspaceApplications {
         return true
     }
 
-    func launchAndActivate(bundleIdentifier: String, completion: @escaping (Bool) -> Void) {
+    func launchAndActivate(bundleIdentifier: String, completion: @MainActor @escaping (Bool) -> Void) {
         launchRequests.append(bundleIdentifier)
         launchCompletion = completion
     }
 }
 
+@MainActor
 final class SuperEngineeringTogglerTests: XCTestCase {
     private let chatGPT = ApplicationIdentity(processIdentifier: 101, bundleIdentifier: "com.openai.chat")
     private let superApp = ApplicationIdentity(processIdentifier: 202, bundleIdentifier: "com.zarifpour.superconductor")
@@ -60,6 +62,19 @@ final class SuperEngineeringTogglerTests: XCTestCase {
         workspace.launchCompletion?(false)
         toggler.toggle()
         XCTAssertEqual(workspace.launchRequests.count, 2)
+    }
+
+    func testMainActorSerializesSeparateTasksDuringLaunch() async {
+        let workspace = WorkspaceStub()
+        workspace.frontmost = chatGPT
+        let toggler = SuperEngineeringToggler(workspace: workspace, log: { _ in })
+
+        let first = Task { @MainActor in toggler.toggle() }
+        let second = Task { @MainActor in toggler.toggle() }
+        await first.value
+        await second.value
+
+        XCTAssertEqual(workspace.launchRequests, ["com.zarifpour.superconductor"])
     }
 
     func testSuperFrontmostWithExitedPreviousApplicationDoesNothing() {
