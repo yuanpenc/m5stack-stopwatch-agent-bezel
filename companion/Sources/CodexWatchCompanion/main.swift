@@ -498,7 +498,7 @@ private final class BLEQuotaWriter: NSObject, CBCentralManagerDelegate, CBPeriph
     }
 }
 
-private struct Options {
+struct Options {
     var codexPath = defaultCodexPath()
     var demo = false
     var jsonOnly = false
@@ -507,6 +507,10 @@ private struct Options {
     var verbose = false
     var deviceIdentifier: UUID?
     var enterBootloader = false
+
+    var startsHIDShortcutListener: Bool {
+        watch && !demo && !jsonOnly && !enterBootloader
+    }
 }
 
 private func executableInPath(named executable: String) -> String? {
@@ -540,10 +544,9 @@ private func defaultCodexPath() -> String {
     return "/usr/local/bin/codex"
 }
 
-private func parseOptions() throws -> Options {
+func parseOptions(_ arguments: [String] = CommandLine.arguments) throws -> Options {
     var options = Options()
     var index = 1
-    let arguments = CommandLine.arguments
     while index < arguments.count {
         switch arguments[index] {
         case "--codex-path":
@@ -601,6 +604,7 @@ private func formatReset(seconds: Int) -> String {
     return "\(max(0, seconds) / 60)m"
 }
 
+@MainActor
 private func run() throws {
     setbuf(stdout, nil)
     setbuf(stderr, nil)
@@ -636,46 +640,81 @@ private func run() throws {
     if !options.demo, !options.jsonOnly, options.deviceIdentifier == nil {
         throw CompanionError.usage("写入真实额度必须提供 --device-id；先运行 --demo --verbose 查看 StopWatch UUID")
     }
+
+    var shortcutToggler: SuperEngineeringToggler?
+    var shortcutListener: HIDShortcutListener?
+    if options.startsHIDShortcutListener {
+        let toggler = SuperEngineeringToggler(
+            workspace: NSWorkspaceApplications(),
+            log: { fputs("快捷键：\($0)\n", stderr) }
+        )
+        let listener = HIDShortcutListener(
+            eventHandler: { [weak toggler] event in
+                if event == .toggleSuperEngineering { toggler?.toggle() }
+            },
+            log: { fputs("快捷键：\($0)\n", stderr) }
+        )
+        do {
+            try listener.start()
+            shortcutToggler = toggler
+            shortcutListener = listener
+        } catch {
+            fputs("快捷键不可用：\(error.localizedDescription)\n", stderr)
+        }
+    }
+    defer {
+        withExtendedLifetime(shortcutToggler) {
+            shortcutListener?.stop()
+        }
+        shortcutListener = nil
+        shortcutToggler = nil
+    }
+
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
     var client: AppServerClient?
-    if !options.demo {
-        client = try AppServerClient(codexPath: options.codexPath)
-    }
 
-    repeat {
-        let snapshot: QuotaSnapshot
-        if options.demo {
-            snapshot = QuotaSnapshot(
-                remainingPercent: 59,
-                resetInSeconds: 3_600
-            )
-        } else {
-            snapshot = try client!.readRateLimits()
+    try runQuotaLoop(
+        watch: options.watch,
+        interval: options.interval,
+        cycle: {
+            if !options.demo, client == nil {
+                client = try AppServerClient(codexPath: options.codexPath)
+            }
+            let snapshot: QuotaSnapshot
+            if options.demo {
+                snapshot = QuotaSnapshot(remainingPercent: 59, resetInSeconds: 3_600)
+            } else {
+                snapshot = try client!.readRateLimits()
+            }
+            let payload = try encoder.encode(snapshot)
+            guard let json = String(data: payload, encoding: .utf8) else {
+                throw CompanionError.malformedRateLimits("无法编码额度 JSON")
+            }
+            print(json)
+            if !options.jsonOnly {
+                _ = try BLEQuotaWriter(
+                    payload: payload,
+                    verbose: options.verbose,
+                    expectedIdentifier: options.deviceIdentifier
+                ).write()
+                print("✓ 已写入 StopWatch：剩余 \(Int(snapshot.remainingPercent.rounded()))%，\(formatReset(seconds: snapshot.resetInSeconds)) 后重置")
+            }
+        },
+        wait: { seconds in
+            RunLoop.current.run(until: Date().addingTimeInterval(seconds))
+        },
+        reportError: { error in
+            client = nil
+            fputs("额度同步失败，将重试：\(error.localizedDescription)\n", stderr)
         }
-
-        let payload = try encoder.encode(snapshot)
-        guard let json = String(data: payload, encoding: .utf8) else {
-            throw CompanionError.malformedRateLimits("无法编码额度 JSON")
-        }
-        print(json)
-
-        if !options.jsonOnly {
-            _ = try BLEQuotaWriter(
-                payload: payload,
-                verbose: options.verbose,
-                expectedIdentifier: options.deviceIdentifier
-            ).write()
-            print("✓ 已写入 StopWatch：剩余 \(Int(snapshot.remainingPercent.rounded()))%，\(formatReset(seconds: snapshot.resetInSeconds)) 后重置")
-        }
-
-        guard options.watch else { break }
-        RunLoop.current.run(until: Date().addingTimeInterval(options.interval))
-    } while true
+    )
 }
 
 do {
-    try run()
+    try MainActor.assumeIsolated {
+        try run()
+    }
 } catch {
     fputs("错误：\(error.localizedDescription)\n", stderr)
     exit(1)
