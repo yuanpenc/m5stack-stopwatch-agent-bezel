@@ -1,7 +1,16 @@
 import XCTest
+import IOKit.hid
 @testable import CodexWatchCompanion
 
 final class HIDShortcutDecoderTests: XCTestCase {
+    func testMatchingDictionaryContainsOnlyExpectedDeviceIdentity() {
+        XCTAssertEqual(HIDShortcutListener.matching.count, 4)
+        XCTAssertEqual(HIDShortcutListener.matching[kIOHIDVendorIDKey as String] as? Int, 0x303A)
+        XCTAssertEqual(HIDShortcutListener.matching[kIOHIDProductIDKey as String] as? Int, 0x8360)
+        XCTAssertEqual(HIDShortcutListener.matching[kIOHIDPrimaryUsagePageKey as String] as? Int, 0xFF00)
+        XCTAssertEqual(HIDShortcutListener.matching[kIOHIDPrimaryUsageKey as String] as? Int, 1)
+    }
+
     private func report(_ fragment: String, paddedTo size: Int = 63) -> [UInt8] {
         let payload = Array(fragment.utf8)
         precondition(payload.count <= 61)
