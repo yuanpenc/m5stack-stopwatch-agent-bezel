@@ -1,6 +1,7 @@
 import Foundation
 import IOKit.hid
 
+@MainActor
 protocol HIDShortcutListening: AnyObject {
     func start() throws
     func stop()
@@ -17,6 +18,7 @@ enum HIDShortcutListenerError: LocalizedError {
     }
 }
 
+@MainActor
 final class HIDShortcutListener: HIDShortcutListening {
     static let matching: [String: Any] = [
         kIOHIDVendorIDKey as String: StopwatchHIDDescriptor.vendorID,
@@ -59,11 +61,13 @@ final class HIDShortcutListener: HIDShortcutListening {
                       reportID == StopwatchHIDDescriptor.reportID,
                       reportLength >= 0 else { return }
 
-                let listener = Unmanaged<HIDShortcutListener>
-                    .fromOpaque(context)
-                    .takeUnretainedValue()
                 let bytes = Array(UnsafeBufferPointer(start: report, count: reportLength))
-                listener.consume(reportID: reportID, bytes: bytes, sender: sender)
+                MainActor.assumeIsolated {
+                    let listener = Unmanaged<HIDShortcutListener>
+                        .fromOpaque(context)
+                        .takeUnretainedValue()
+                    listener.consume(reportID: reportID, bytes: bytes, sender: sender)
+                }
             },
             context
         )
@@ -73,10 +77,12 @@ final class HIDShortcutListener: HIDShortcutListening {
                 guard result == kIOReturnSuccess,
                       let context else { return }
 
-                let listener = Unmanaged<HIDShortcutListener>
-                    .fromOpaque(context)
-                    .takeUnretainedValue()
-                listener.deviceMatched(device)
+                MainActor.assumeIsolated {
+                    let listener = Unmanaged<HIDShortcutListener>
+                        .fromOpaque(context)
+                        .takeUnretainedValue()
+                    listener.deviceMatched(device)
+                }
             },
             context
         )
@@ -86,10 +92,12 @@ final class HIDShortcutListener: HIDShortcutListening {
                 guard result == kIOReturnSuccess,
                       let context else { return }
 
-                let listener = Unmanaged<HIDShortcutListener>
-                    .fromOpaque(context)
-                    .takeUnretainedValue()
-                listener.deviceRemoved(device)
+                MainActor.assumeIsolated {
+                    let listener = Unmanaged<HIDShortcutListener>
+                        .fromOpaque(context)
+                        .takeUnretainedValue()
+                    listener.deviceRemoved(device)
+                }
             },
             context
         )
@@ -138,7 +146,9 @@ final class HIDShortcutListener: HIDShortcutListening {
     }
 
     deinit {
-        stop()
+        MainActor.assumeIsolated {
+            stop()
+        }
     }
 
     private func consume(reportID: UInt32, bytes: [UInt8], sender: UnsafeMutableRawPointer) {

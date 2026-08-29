@@ -2,6 +2,7 @@ import XCTest
 import IOKit.hid
 @testable import CodexWatchCompanion
 
+@MainActor
 final class HIDShortcutDecoderTests: XCTestCase {
     func testMatchingDictionaryContainsOnlyExpectedDeviceIdentity() {
         XCTAssertEqual(HIDShortcutListener.matching.count, 4)
