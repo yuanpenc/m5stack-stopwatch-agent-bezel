@@ -4,6 +4,22 @@ import IOKit.hid
 
 @MainActor
 final class HIDShortcutDecoderTests: XCTestCase {
+    func testInvalidatedCallbackContextIgnoresDelayedDelivery() {
+        var delivered: [HIDShortcutCallbackAction] = []
+        let session = HIDShortcutCallbackSession { delivered.append($0) }
+        let context = HIDShortcutCallbackRegistry.retain(session)
+        let delayedSession = HIDShortcutCallbackRegistry.session(for: context)
+
+        session.deliver(.matched(deviceKey: 1))
+        XCTAssertEqual(delivered, [.matched(deviceKey: 1)])
+
+        HIDShortcutCallbackRegistry.invalidate(context)
+        delayedSession?.deliver(.removed(deviceKey: 1))
+
+        XCTAssertEqual(delivered, [.matched(deviceKey: 1)])
+        XCTAssertNil(HIDShortcutCallbackRegistry.session(for: context))
+    }
+
     func testMatchingDictionaryContainsOnlyExpectedDeviceIdentity() {
         XCTAssertEqual(HIDShortcutListener.matching.count, 4)
         XCTAssertEqual(HIDShortcutListener.matching[kIOHIDVendorIDKey as String] as? Int, 0x303A)

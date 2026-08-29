@@ -18,6 +18,117 @@ enum HIDShortcutListenerError: LocalizedError {
     }
 }
 
+enum HIDShortcutCallbackAction: Equatable {
+    case input(reportID: Int, bytes: [UInt8], deviceKey: UInt)
+    case matched(deviceKey: UInt)
+    case removed(deviceKey: UInt)
+}
+
+final class HIDShortcutCallbackSession: @unchecked Sendable {
+    private let lock = NSLock()
+    private var handler: (@MainActor (HIDShortcutCallbackAction) -> Void)?
+
+    init(handler: @MainActor @escaping (HIDShortcutCallbackAction) -> Void) {
+        self.handler = handler
+    }
+
+    func invalidate() {
+        lock.lock()
+        handler = nil
+        lock.unlock()
+    }
+
+    @MainActor
+    func deliver(_ action: HIDShortcutCallbackAction) {
+        lock.lock()
+        let handler = handler
+        lock.unlock()
+        handler?(action)
+    }
+}
+
+enum HIDShortcutCallbackRegistry {
+    private final class State: @unchecked Sendable {
+        let lock = NSLock()
+        var sessions: [UInt: HIDShortcutCallbackSession] = [:]
+        var nextToken: UInt = 1
+    }
+
+    private static let state = State()
+
+    static func retain(_ session: HIDShortcutCallbackSession) -> UnsafeMutableRawPointer {
+        // IOKit only echoes this opaque token; it is never dereferenced or reused.
+        state.lock.lock()
+        precondition(state.nextToken < UInt.max, "StopWatch HID callback token space exhausted")
+        let token = state.nextToken
+        state.nextToken += 1
+        state.sessions[token] = session
+        state.lock.unlock()
+        return UnsafeMutableRawPointer(bitPattern: token)!
+    }
+
+    static func session(for context: UnsafeMutableRawPointer?) -> HIDShortcutCallbackSession? {
+        guard let context else { return nil }
+        let token = UInt(bitPattern: context)
+        state.lock.lock()
+        let session = state.sessions[token]
+        state.lock.unlock()
+        return session
+    }
+
+    static func invalidate(_ context: UnsafeMutableRawPointer) {
+        let token = UInt(bitPattern: context)
+        state.lock.lock()
+        let session = state.sessions.removeValue(forKey: token)
+        state.lock.unlock()
+        session?.invalidate()
+    }
+}
+
+private final class HIDShortcutManagerLifetime: @unchecked Sendable {
+    let manager: IOHIDManager
+    let context: UnsafeMutableRawPointer
+
+    private let lock = NSLock()
+    private var tornDown = false
+
+    init(manager: IOHIDManager, context: UnsafeMutableRawPointer) {
+        self.manager = manager
+        self.context = context
+    }
+
+    @MainActor
+    func tearDown() {
+        HIDShortcutCallbackRegistry.invalidate(context)
+
+        lock.lock()
+        guard !tornDown else {
+            lock.unlock()
+            return
+        }
+        tornDown = true
+        lock.unlock()
+
+        IOHIDManagerRegisterInputReportCallback(manager, nil, nil)
+        IOHIDManagerRegisterDeviceMatchingCallback(manager, nil, nil)
+        IOHIDManagerRegisterDeviceRemovalCallback(manager, nil, nil)
+        IOHIDManagerUnscheduleFromRunLoop(
+            manager,
+            CFRunLoopGetMain(),
+            CFRunLoopMode.defaultMode.rawValue
+        )
+        IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+    }
+
+    func tearDownAfterFinalRelease() {
+        // Late callbacks become no-ops before teardown is handed to the main RunLoop.
+        HIDShortcutCallbackRegistry.invalidate(context)
+        Task { @MainActor [self] in
+            tearDown()
+        }
+    }
+}
+
 @MainActor
 final class HIDShortcutListener: HIDShortcutListening {
     static let matching: [String: Any] = [
@@ -29,7 +140,7 @@ final class HIDShortcutListener: HIDShortcutListening {
 
     private let eventHandler: (CompanionShortcutEvent) -> Void
     private let log: (String) -> Void
-    private var manager: IOHIDManager?
+    private var lifetime: HIDShortcutManagerLifetime?
     private var decodersByDevice: [UInt: HIDShortcutDecoder] = [:]
     private var warnedAboutPermission = false
 
@@ -42,13 +153,17 @@ final class HIDShortcutListener: HIDShortcutListening {
     }
 
     func start() throws {
-        guard manager == nil else { return }
+        guard lifetime == nil else { return }
 
         let manager = IOHIDManagerCreate(
             kCFAllocatorDefault,
             IOOptionBits(kIOHIDOptionsTypeNone)
         )
-        let context = Unmanaged.passUnretained(self).toOpaque()
+        let callbackSession = HIDShortcutCallbackSession { [weak self] action in
+            self?.handle(action)
+        }
+        let context = HIDShortcutCallbackRegistry.retain(callbackSession)
+        let lifetime = HIDShortcutManagerLifetime(manager: manager, context: context)
 
         IOHIDManagerSetDeviceMatching(manager, Self.matching as CFDictionary)
         IOHIDManagerRegisterInputReportCallback(
@@ -62,11 +177,13 @@ final class HIDShortcutListener: HIDShortcutListening {
                       reportLength >= 0 else { return }
 
                 let bytes = Array(UnsafeBufferPointer(start: report, count: reportLength))
+                guard let session = HIDShortcutCallbackRegistry.session(for: context) else { return }
                 MainActor.assumeIsolated {
-                    let listener = Unmanaged<HIDShortcutListener>
-                        .fromOpaque(context)
-                        .takeUnretainedValue()
-                    listener.consume(reportID: reportID, bytes: bytes, sender: sender)
+                    session.deliver(.input(
+                        reportID: Int(reportID),
+                        bytes: bytes,
+                        deviceKey: UInt(bitPattern: sender)
+                    ))
                 }
             },
             context
@@ -77,11 +194,10 @@ final class HIDShortcutListener: HIDShortcutListening {
                 guard result == kIOReturnSuccess,
                       let context else { return }
 
+                guard let session = HIDShortcutCallbackRegistry.session(for: context) else { return }
+                let deviceKey = UInt(bitPattern: Unmanaged.passUnretained(device).toOpaque())
                 MainActor.assumeIsolated {
-                    let listener = Unmanaged<HIDShortcutListener>
-                        .fromOpaque(context)
-                        .takeUnretainedValue()
-                    listener.deviceMatched(device)
+                    session.deliver(.matched(deviceKey: deviceKey))
                 }
             },
             context
@@ -92,17 +208,16 @@ final class HIDShortcutListener: HIDShortcutListening {
                 guard result == kIOReturnSuccess,
                       let context else { return }
 
+                guard let session = HIDShortcutCallbackRegistry.session(for: context) else { return }
+                let deviceKey = UInt(bitPattern: Unmanaged.passUnretained(device).toOpaque())
                 MainActor.assumeIsolated {
-                    let listener = Unmanaged<HIDShortcutListener>
-                        .fromOpaque(context)
-                        .takeUnretainedValue()
-                    listener.deviceRemoved(device)
+                    session.deliver(.removed(deviceKey: deviceKey))
                 }
             },
             context
         )
 
-        self.manager = manager
+        self.lifetime = lifetime
         IOHIDManagerScheduleWithRunLoop(
             manager,
             CFRunLoopGetMain(),
@@ -117,58 +232,46 @@ final class HIDShortcutListener: HIDShortcutListening {
 
         let result = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         guard result == kIOReturnSuccess else {
-            IOHIDManagerUnscheduleFromRunLoop(
-                manager,
-                CFRunLoopGetMain(),
-                CFRunLoopMode.defaultMode.rawValue
-            )
-            IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-            self.manager = nil
+            lifetime.tearDown()
+            self.lifetime = nil
             decodersByDevice.removeAll()
             throw HIDShortcutListenerError.openFailed(result)
         }
     }
 
     func stop() {
-        guard let manager else {
+        guard let lifetime else {
             decodersByDevice.removeAll()
             return
         }
 
-        IOHIDManagerUnscheduleFromRunLoop(
-            manager,
-            CFRunLoopGetMain(),
-            CFRunLoopMode.defaultMode.rawValue
-        )
-        IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-        self.manager = nil
+        self.lifetime = nil
+        lifetime.tearDown()
         decodersByDevice.removeAll()
     }
 
     deinit {
-        MainActor.assumeIsolated {
-            stop()
+        lifetime?.tearDownAfterFinalRelease()
+    }
+
+    private func handle(_ action: HIDShortcutCallbackAction) {
+        switch action {
+        case .input(let reportID, let bytes, let deviceKey):
+            consume(reportID: reportID, bytes: bytes, deviceKey: deviceKey)
+        case .matched(let deviceKey):
+            decodersByDevice[deviceKey] = HIDShortcutDecoder()
+            log("StopWatch HID 已连接")
+        case .removed(let deviceKey):
+            decodersByDevice.removeValue(forKey: deviceKey)
+            log("StopWatch HID 已断开")
         }
     }
 
-    private func consume(reportID: UInt32, bytes: [UInt8], sender: UnsafeMutableRawPointer) {
-        let deviceKey = UInt(bitPattern: sender)
+    private func consume(reportID: Int, bytes: [UInt8], deviceKey: UInt) {
         let now = ProcessInfo.processInfo.systemUptime
         var decoder = decodersByDevice[deviceKey] ?? HIDShortcutDecoder()
-        let events = decoder.consume(reportID: Int(reportID), bytes: bytes, now: now)
+        let events = decoder.consume(reportID: reportID, bytes: bytes, now: now)
         decodersByDevice[deviceKey] = decoder
         events.forEach(eventHandler)
-    }
-
-    private func deviceMatched(_ device: IOHIDDevice) {
-        let deviceKey = UInt(bitPattern: Unmanaged.passUnretained(device).toOpaque())
-        decodersByDevice[deviceKey] = HIDShortcutDecoder()
-        log("StopWatch HID 已连接")
-    }
-
-    private func deviceRemoved(_ device: IOHIDDevice) {
-        let deviceKey = UInt(bitPattern: Unmanaged.passUnretained(device).toOpaque())
-        decodersByDevice.removeValue(forKey: deviceKey)
-        log("StopWatch HID 已断开")
     }
 }
