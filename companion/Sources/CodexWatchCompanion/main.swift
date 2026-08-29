@@ -154,12 +154,13 @@ private final class AppServerClient {
 
     private func waitForResponse(id: Int, timeout: TimeInterval) throws -> [String: Any] {
         let deadline = Date().addingTimeInterval(timeout)
+        _ = waitForAppServerState(condition: condition, deadline: deadline) {
+            if responses[id] != nil { return .responseAvailable }
+            return process.isRunning ? .waiting : .processExited
+        }
+
         condition.lock()
         defer { condition.unlock() }
-
-        while responses[id] == nil, process.isRunning, Date() < deadline {
-            condition.wait(until: deadline)
-        }
         if let response = responses.removeValue(forKey: id) {
             return response
         }

@@ -2,6 +2,35 @@ import XCTest
 @testable import CodexWatchCompanion
 
 final class CompanionRuntimeTests: XCTestCase {
+    @MainActor
+    func testAppServerWaitPumpsMainRunLoopBeforeResponse() {
+        let condition = NSCondition()
+        var events: [String] = []
+        var responseReady = false
+
+        RunLoop.current.perform(inModes: [.default]) {
+            condition.lock()
+            events.append("callback")
+            condition.unlock()
+        }
+        RunLoop.current.perform(inModes: [.default]) {
+            condition.lock()
+            events.append("response")
+            responseReady = true
+            condition.broadcast()
+            condition.unlock()
+        }
+
+        let outcome = waitForAppServerState(
+            condition: condition,
+            deadline: Date().addingTimeInterval(0.5),
+            state: { responseReady ? .responseAvailable : .waiting }
+        )
+
+        XCTAssertEqual(outcome, .responseAvailable)
+        XCTAssertEqual(events, ["callback", "response"])
+    }
+
     func testOnlyRealWatchModeStartsHIDListener() throws {
         XCTAssertTrue(try parseOptions(["companion", "--watch", "--device-id", "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"]).startsHIDShortcutListener)
         XCTAssertFalse(try parseOptions(["companion", "--watch", "--demo"]).startsHIDShortcutListener)
