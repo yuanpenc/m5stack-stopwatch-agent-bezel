@@ -642,33 +642,39 @@ private func run() throws {
         throw CompanionError.usage("写入真实额度必须提供 --device-id；先运行 --demo --verbose 查看 StopWatch UUID")
     }
 
-    var shortcutToggler: SuperEngineeringToggler?
+    var shortcutRouter: SuperEngineeringCommandRouter?
     var shortcutListener: HIDShortcutListener?
     if options.startsHIDShortcutListener {
+        let workspace = NSWorkspaceApplications()
         let toggler = SuperEngineeringToggler(
-            workspace: NSWorkspaceApplications(),
+            workspace: workspace,
+            log: { fputs("快捷键：\($0)\n", stderr) }
+        )
+        let router = SuperEngineeringCommandRouter(
+            workspace: workspace,
+            toggler: toggler,
+            emitter: SystemProcessTargetedKeyEmitter(),
+            accessibility: SystemAccessibilityTrustChecker(),
             log: { fputs("快捷键：\($0)\n", stderr) }
         )
         let listener = HIDShortcutListener(
-            eventHandler: { [weak toggler] event in
-                if event == .toggleSuperEngineering { toggler?.toggle() }
-            },
+            eventHandler: { [weak router] event in router?.handle(event) },
             log: { fputs("快捷键：\($0)\n", stderr) }
         )
         do {
             try listener.start()
-            shortcutToggler = toggler
+            shortcutRouter = router
             shortcutListener = listener
         } catch {
             fputs("快捷键不可用：\(error.localizedDescription)\n", stderr)
         }
     }
     defer {
-        withExtendedLifetime(shortcutToggler) {
+        withExtendedLifetime(shortcutRouter) {
             shortcutListener?.stop()
         }
         shortcutListener = nil
-        shortcutToggler = nil
+        shortcutRouter = nil
     }
 
     let encoder = JSONEncoder()

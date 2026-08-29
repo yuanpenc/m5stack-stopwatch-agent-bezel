@@ -65,7 +65,12 @@ final class NSWorkspaceApplications: WorkspaceApplications {
 }
 
 @MainActor
-final class SuperEngineeringToggler {
+protocol SuperEngineeringToggling: AnyObject {
+    func toggle()
+}
+
+@MainActor
+final class SuperEngineeringToggler: SuperEngineeringToggling {
     static let targetBundleIdentifier = "com.zarifpour.superconductor"
     static let companionBundleIdentifier = "io.github.codex-micro-stopwatch.companion"
 
