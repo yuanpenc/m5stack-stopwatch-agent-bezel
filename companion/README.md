@@ -51,6 +51,36 @@ otherwise the dashboard will correctly mark quota sync stale.
 Pass `--codex-path /absolute/path/to/codex` when automatic executable discovery
 does not select the intended local Codex installation.
 
+## Optional super.engineering left-swipe shortcut
+
+A real `--watch` process also listens for the C152 StopWatch left-swipe HID
+report. One left swipe activates or launches the app whose bundle identifier is
+`com.zarifpour.superconductor`; the next left swipe returns to the application
+that was previously in front. If that application has exited, the companion
+leaves super.engineering in front and records the failure without choosing a
+different application. Repeated launch gestures are ignored while a launch is
+already in progress.
+
+Before using the shortcut:
+
+1. In ChatGPT's StopWatch controller settings, leave **Analog stick left**
+   unassigned. The up, right, and down bindings do not need to change.
+2. Add the locally installed `CodexWatchCompanion.app` under **System Settings →
+   Privacy & Security → Input Monitoring** and enable it.
+3. Restart the companion LaunchAgent after changing either setting.
+
+If Input Monitoring is missing, the companion warns once and keeps quota sync
+running; only the shortcut is unavailable. The HID listener starts only in a
+real `--watch` run, not in one-shot, `--demo`, `--json-only`, or
+`--enter-bootloader` modes. It matches only the C152 descriptor and shortcut
+report used by this project, and recognizes only the left radial gesture.
+
+This feature does not run `sc`, shell commands, or AppleScript; it does not read
+super.engineering sessions, workspaces, settings, credentials, or keyboard
+text. It also does not change or reflash the StopWatch firmware. To roll back,
+install the previously backed-up companion app and restart the existing
+LaunchAgent; no device-side rollback is required.
+
 Useful diagnostics:
 
 ```sh
@@ -122,5 +152,7 @@ CoreBluetooth UUID, so another same-name peripheral is ignored.
 
 The companion sends only the percentage and reset fields documented in
 [`docs/COMPANION_PROTOCOL.md`](../docs/COMPANION_PROTOCOL.md). Agent status,
-button events, voice actions, and analog directions stay on the Codex Micro HID
-channel. Audio is outside this companion's scope.
+button events, voice actions, and the other analog directions stay on the Codex
+Micro HID channel. In a real `--watch` run, the companion recognizes only the
+left radial event described above; it does not capture keyboard text. Audio is
+outside this companion's scope.
