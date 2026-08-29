@@ -51,35 +51,67 @@ otherwise the dashboard will correctly mark quota sync stale.
 Pass `--codex-path /absolute/path/to/codex` when automatic executable discovery
 does not select the intended local Codex installation.
 
-## Optional super.engineering left-swipe shortcut
+## Optional super.engineering dedicated workspace controls
 
-A real `--watch` process also listens for the C152 StopWatch left-swipe HID
-report. One left swipe activates or launches the app whose bundle identifier is
-`com.zarifpour.superconductor`; the next left swipe returns to the application
-that was previously in front. If that application has exited, the companion
-leaves super.engineering in front and records the failure without choosing a
-different application. Repeated launch gestures are ignored while a launch is
-already in progress.
+A real `--watch` process also listens for the four radial reports from the C152
+StopWatch:
 
-Before using the shortcut:
+| Gesture | Behavior |
+| --- | --- |
+| Left | Activate or launch super.engineering; when it is already in front, return to the exact previously foreground application |
+| Up | Select Previous Project while super.engineering is in front |
+| Down | Select Next Project while super.engineering is in front |
+| Right | Select Next Tab while super.engineering is in front |
 
-1. In ChatGPT's StopWatch controller settings, leave **Analog stick left**
-   unassigned. The up, right, and down bindings do not need to change.
-2. Add the locally installed `CodexWatchCompanion.app` under **System Settings →
-   Privacy & Security → Input Monitoring** and enable it.
-3. Restart the companion LaunchAgent after changing either setting.
+The target is identified only by bundle identifier
+`com.zarifpour.superconductor`. If the remembered return application has
+exited, the companion leaves super.engineering in front instead of guessing a
+replacement. Repeated launch gestures are ignored while launch is in progress,
+and radial presses use a release gate plus an 800-millisecond cooldown.
+
+Prepare the dedicated workspace before using these controls:
+
+1. Create a normal macOS Space, move super.engineering there, then use the
+   application's Dock menu and choose **Options → Assign To → This Desktop**.
+   The companion does not create or enumerate Spaces. Without this assignment,
+   left still activates and returns, but macOS provides no dedicated-desktop
+   guarantee.
+2. In super.engineering's **Keyboard Shortcuts** settings, configure **Previous
+   Project** as `Control-Option-Up`, **Next Project** as
+   `Control-Option-Down`, and **Next Tab** as `Control-Option-Right`.
+3. In ChatGPT's StopWatch controller settings, leave only **Analog stick left**
+   unassigned. Keep the existing up, down, and right bindings.
+4. Add the locally installed `CodexWatchCompanion.app` under **System Settings →
+   Privacy & Security → Input Monitoring** and **Accessibility**, and enable it
+   in both places.
+5. Restart the existing companion LaunchAgent after changing permissions.
+
+Up, down, and right are companion no-ops unless super.engineering is the exact
+foreground application, so ChatGPT retains its mappings after the user returns
+to it. Physical acceptance must also confirm that ChatGPT performs no visible
+background action while super.engineering is in front; the companion does not
+rewrite ChatGPT preferences if that compatibility check fails.
 
 If Input Monitoring is missing, the companion warns once and keeps quota sync
-running; only the shortcut is unavailable. The HID listener starts only in a
-real `--watch` run, not in one-shot, `--demo`, `--json-only`, or
-`--enter-bootloader` modes. It matches only the C152 descriptor and shortcut
-report used by this project, and recognizes only the left radial gesture.
+running, but cannot receive any StopWatch radial gesture. If Accessibility is
+missing, it warns once and disables only project/tab navigation; left-swipe
+activation and return, quota sync, and USB microphone input remain available.
+The HID listener starts only in a real `--watch` run, not in one-shot, `--demo`,
+`--json-only`, or `--enter-bootloader` modes. It matches only the exact C152
+descriptor and report used by this project.
 
-This feature does not run `sc`, shell commands, or AppleScript; it does not read
-super.engineering sessions, workspaces, settings, credentials, or keyboard
-text. It also does not change or reflash the StopWatch firmware. To roll back,
-install the previously backed-up companion app and restart the existing
-LaunchAgent; no device-side rollback is required.
+Navigation uses fixed, process-targeted CoreGraphics key-down/key-up pairs. It
+revalidates both the foreground identity and the PID/bundle pair before every
+delivery. It never posts those keys globally and does not inspect menus,
+Accessibility labels, screen coordinates, project names, session titles,
+application preferences, conversation content, keyboard text, or credentials.
+It does not run `sc`, shell commands, or AppleScript, and it does not change or
+reflash the StopWatch firmware.
+
+For rollback, restore the previously backed-up companion app and restart the
+same LaunchAgent. Optionally set the Dock assignment back to **None** and reset
+the three super.engineering shortcuts. No firmware or device-side rollback is
+required.
 
 Useful diagnostics:
 
@@ -152,7 +184,8 @@ CoreBluetooth UUID, so another same-name peripheral is ignored.
 
 The companion sends only the percentage and reset fields documented in
 [`docs/COMPANION_PROTOCOL.md`](../docs/COMPANION_PROTOCOL.md). Agent status,
-button events, voice actions, and the other analog directions stay on the Codex
-Micro HID channel. In a real `--watch` run, the companion recognizes only the
-left radial event described above; it does not capture keyboard text. Audio is
-outside this companion's scope.
+button events, and voice actions stay on the Codex Micro HID channel. In a real
+`--watch` run, the companion recognizes only the four fixed radial events
+described above and emits only the three fixed, process-targeted navigation key
+pairs; it does not capture keyboard text. Audio is outside this companion's
+scope.
