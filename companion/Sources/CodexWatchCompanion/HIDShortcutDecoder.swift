@@ -10,6 +10,7 @@ enum StopwatchHIDDescriptor {
     static let usagePage = 0xFF00
     static let usage = 1
     static let reportID = 6
+    static let reportBodyByteCount = 63
 }
 
 struct HIDShortcutDecoder {
@@ -34,16 +35,22 @@ struct HIDShortcutDecoder {
 
     mutating func consume(reportID: Int, bytes: [UInt8], now: TimeInterval) -> [CompanionShortcutEvent] {
         guard reportID == StopwatchHIDDescriptor.reportID else { return [] }
-        guard bytes.count >= 2, bytes[0] == Self.fragmentMarker else {
+        // On the physical C152, macOS supplies the report ID both as the
+        // callback argument and as the first byte of the 64-byte raw report.
+        let body = bytes.count == StopwatchHIDDescriptor.reportBodyByteCount + 1
+            && bytes.first == UInt8(reportID)
+            ? Array(bytes.dropFirst())
+            : bytes
+        guard body.count >= 2, body[0] == Self.fragmentMarker else {
             receiveBuffer.removeAll(keepingCapacity: true)
             return []
         }
-        let length = Int(bytes[1])
-        guard length <= bytes.count - 2 else {
+        let length = Int(body[1])
+        guard length <= body.count - 2 else {
             receiveBuffer.removeAll(keepingCapacity: true)
             return []
         }
-        receiveBuffer.append(contentsOf: bytes[2 ..< 2 + length])
+        receiveBuffer.append(contentsOf: body[2 ..< 2 + length])
         guard receiveBuffer.count <= Self.maximumMessageBytes else {
             receiveBuffer.removeAll(keepingCapacity: true)
             return []

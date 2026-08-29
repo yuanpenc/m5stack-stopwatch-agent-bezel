@@ -41,6 +41,17 @@ final class HIDShortcutDecoderTests: XCTestCase {
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(#"rad","params":{"a":0.5,"d":1.0}}"# + "\n"), now: 10.01), [.toggleSuperEngineering])
     }
 
+    func testRawMacOSCallbackIncludingReportIDProducesToggle() {
+        var decoder = HIDShortcutDecoder()
+        let body = report(#"{"method":"v.oai.rad","params":{"a":0.5,"d":1.0}}"# + "\n")
+        let rawReport = [UInt8(StopwatchHIDDescriptor.reportID)] + body
+
+        XCTAssertEqual(
+            decoder.consume(reportID: 6, bytes: rawReport, now: 10),
+            [.toggleSuperEngineering]
+        )
+    }
+
     func testReleaseRearmsButCooldownBlocksImmediateSecondPress() {
         var decoder = HIDShortcutDecoder()
         let press = report(#"{"method":"v.oai.rad","params":{"a":0.5,"d":1.0}}"# + "\n")
