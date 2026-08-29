@@ -35,6 +35,35 @@ final class HIDShortcutDecoderTests: XCTestCase {
             + Array(repeating: 0, count: max(0, size - payload.count - 2))
     }
 
+    private func radial(angle: Double, distance: Double) -> [UInt8] {
+        report(#"{"method":"v.oai.rad","params":{"a":\#(angle),"d":\#(distance)}}"# + "\n")
+    }
+
+    func testFourPhysicalAnglesProduceTypedEvents() {
+        let cases: [(Double, CompanionShortcutEvent)] = [
+            (0.00, .navigateSuperEngineering(.nextTab)),
+            (0.25, .navigateSuperEngineering(.nextProject)),
+            (0.50, .toggleSuperEngineering),
+            (0.75, .navigateSuperEngineering(.previousProject)),
+        ]
+
+        for (angle, expected) in cases {
+            var decoder = HIDShortcutDecoder()
+            XCTAssertEqual(
+                decoder.consume(reportID: 6, bytes: radial(angle: angle, distance: 1), now: 10),
+                [expected]
+            )
+        }
+    }
+
+    func testUnknownAngleOutsideToleranceIsIgnored() {
+        var decoder = HIDShortcutDecoder()
+        XCTAssertEqual(
+            decoder.consume(reportID: 6, bytes: radial(angle: 0.12, distance: 1), now: 10),
+            []
+        )
+    }
+
     func testFragmentedLeftPressProducesOneToggle() {
         var decoder = HIDShortcutDecoder()
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(#"{"method":"v.oai."#), now: 10), [])
@@ -64,6 +93,22 @@ final class HIDShortcutDecoderTests: XCTestCase {
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: press, now: 1.81), [.toggleSuperEngineering])
     }
 
+    func testPressRejectedByCooldownStillRequiresReleaseBeforeAnotherDirectionCanFire() {
+        var decoder = HIDShortcutDecoder()
+        XCTAssertEqual(
+            decoder.consume(reportID: 6, bytes: radial(angle: 0, distance: 1), now: 1),
+            [.navigateSuperEngineering(.nextTab)]
+        )
+        XCTAssertEqual(decoder.consume(reportID: 6, bytes: radial(angle: 0, distance: 0), now: 1.1), [])
+        XCTAssertEqual(decoder.consume(reportID: 6, bytes: radial(angle: 0.75, distance: 1), now: 1.2), [])
+        XCTAssertEqual(decoder.consume(reportID: 6, bytes: radial(angle: 0.75, distance: 1), now: 2.1), [])
+        XCTAssertEqual(decoder.consume(reportID: 6, bytes: radial(angle: 0.75, distance: 0), now: 2.2), [])
+        XCTAssertEqual(
+            decoder.consume(reportID: 6, bytes: radial(angle: 0.25, distance: 1), now: 2.3),
+            [.navigateSuperEngineering(.nextProject)]
+        )
+    }
+
     func testMalformedFrameClearsBufferAndNextMessageRecovers() {
         var decoder = HIDShortcutDecoder()
         _ = decoder.consume(reportID: 6, bytes: report(#"{"method":"v.oai."#), now: 1)
@@ -77,7 +122,7 @@ final class HIDShortcutDecoderTests: XCTestCase {
         let left = report(#"{"method":"v.oai.rad","params":{"a":0.5,"d":1.0}}"# + "\n")
         XCTAssertEqual(decoder.consume(reportID: 5, bytes: left, now: 1), [])
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(#"{"method":"other","params":{"a":0.5,"d":1.0}}"# + "\n"), now: 2), [])
-        XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(#"{"method":"v.oai.rad","params":{"a":0.0,"d":1.0}}"# + "\n"), now: 3), [])
+        XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(#"{"method":"v.oai.rad","params":{"a":0.12,"d":1.0}}"# + "\n"), now: 3), [])
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(#"{"method":"v.oai.rad","params":{"a":"NaN","d":1.0}}"# + "\n"), now: 4), [])
     }
 

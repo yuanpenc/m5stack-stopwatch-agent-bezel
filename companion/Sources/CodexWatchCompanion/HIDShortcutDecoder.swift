@@ -1,7 +1,14 @@
 import Foundation
 
+enum SuperEngineeringNavigationCommand: Equatable {
+    case previousProject
+    case nextProject
+    case nextTab
+}
+
 enum CompanionShortcutEvent: Equatable {
     case toggleSuperEngineering
+    case navigateSuperEngineering(SuperEngineeringNavigationCommand)
 }
 
 enum StopwatchHIDDescriptor {
@@ -77,15 +84,25 @@ struct HIDShortcutDecoder {
         guard message.method == "v.oai.rad",
               message.params.a.isFinite,
               message.params.d.isFinite,
-              abs(message.params.a - 0.5) <= Self.directionTolerance else { return nil }
+              let event = event(for: message.params.a) else { return nil }
         if abs(message.params.d) <= Self.distanceTolerance {
             armed = true
             return nil
         }
         guard abs(message.params.d - 1.0) <= Self.distanceTolerance, armed else { return nil }
-        guard lastAcceptedAt.map({ now - $0 >= Self.cooldown }) ?? true else { return nil }
         armed = false
+        guard lastAcceptedAt.map({ now - $0 >= Self.cooldown }) ?? true else { return nil }
         lastAcceptedAt = now
-        return .toggleSuperEngineering
+        return event
+    }
+
+    private func event(for angle: Double) -> CompanionShortcutEvent? {
+        let candidates: [(Double, CompanionShortcutEvent)] = [
+            (0.00, .navigateSuperEngineering(.nextTab)),
+            (0.25, .navigateSuperEngineering(.nextProject)),
+            (0.50, .toggleSuperEngineering),
+            (0.75, .navigateSuperEngineering(.previousProject)),
+        ]
+        return candidates.first { abs(angle - $0.0) <= Self.directionTolerance }?.1
     }
 }
