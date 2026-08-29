@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-29
 
-**Status:** Approved interaction and architecture; written-spec review pending
+**Status:** Approved
 
 **Target:** M5Stack StopWatch Dev Kit C152 with the installed USB microphone firmware
 
