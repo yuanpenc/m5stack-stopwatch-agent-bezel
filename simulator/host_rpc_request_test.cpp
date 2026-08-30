@@ -18,6 +18,7 @@ host_rpc::Method classify(const char* json) {
 
 int main() {
   using host_rpc::Method;
+  using host_rpc::RpcDisposition;
 
   assert(classify(R"({"method":"sys.version","id":1})") ==
          Method::SystemVersion);
@@ -31,15 +32,42 @@ int main() {
          Method::LightsPreview);
   assert(classify(R"({"method":"host.focused_app","id":6})") ==
          Method::HostFocusedApp);
+  assert(classify(
+             R"({"method":"host.workspace_mode","params":{"mode":"super","ttl_ms":15000},"id":7})") ==
+         Method::WorkspaceMode);
+
+  // Once the exact method is recognized, parameter validation belongs to the
+  // workspace parser so malformed calls receive Invalid params, not Method not
+  // found.
+  assert(classify(
+             R"({"method":"host.workspace_mode","params":[],"id":8})") ==
+         Method::WorkspaceMode);
 
   // A parseable method name is not enough to establish trusted host activity.
-  assert(classify(R"({"method":"attacker.probe","params":{},"id":7})") ==
+  assert(classify(R"({"method":"attacker.probe","params":{},"id":9})") ==
          Method::Unsupported);
-  assert(classify(R"({"method":"v.oai.thstatus","params":{},"id":8})") ==
+  assert(classify(R"({"method":"v.oai.thstatus","params":{},"id":10})") ==
          Method::Unsupported);
-  assert(classify(R"({"method":"v.oai.rgbcfg","params":[],"id":9})") ==
+  assert(classify(R"({"method":"v.oai.rgbcfg","params":[],"id":11})") ==
          Method::Unsupported);
-  assert(classify(R"({"method":42,"params":{},"id":10})") ==
+  assert(classify(R"({"method":42,"params":{},"id":12})") ==
          Method::Unsupported);
   assert(classify(R"(["device.status"])") == Method::Unsupported);
+
+  assert(host_rpc::disposition(Method::WorkspaceMode) ==
+         RpcDisposition::ControlOnly);
+  assert(host_rpc::disposition(Method::DeviceStatus) ==
+         RpcDisposition::HostActivity);
+  assert(host_rpc::disposition(Method::SystemVersion) ==
+         RpcDisposition::HostActivity);
+  assert(host_rpc::disposition(Method::ThreadStatus) ==
+         RpcDisposition::HostActivity);
+  assert(host_rpc::disposition(Method::RgbConfig) ==
+         RpcDisposition::HostActivity);
+  assert(host_rpc::disposition(Method::LightsPreview) ==
+         RpcDisposition::HostActivity);
+  assert(host_rpc::disposition(Method::HostFocusedApp) ==
+         RpcDisposition::HostActivity);
+  assert(host_rpc::disposition(Method::Unsupported) ==
+         RpcDisposition::Unsupported);
 }

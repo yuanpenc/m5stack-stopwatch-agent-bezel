@@ -16,6 +16,13 @@ enum class Method : std::uint8_t {
   RgbConfig,
   LightsPreview,
   HostFocusedApp,
+  WorkspaceMode,
+};
+
+enum class RpcDisposition : std::uint8_t {
+  Unsupported,
+  ControlOnly,
+  HostActivity,
 };
 
 inline Method classify(JsonObjectConst request) {
@@ -42,7 +49,16 @@ inline Method classify(JsonObjectConst request) {
   if (std::strcmp(method, "host.focused_app") == 0) {
     return Method::HostFocusedApp;
   }
+  if (std::strcmp(method, "host.workspace_mode") == 0) {
+    return Method::WorkspaceMode;
+  }
   return Method::Unsupported;
+}
+
+inline RpcDisposition disposition(Method method) {
+  if (method == Method::Unsupported) return RpcDisposition::Unsupported;
+  if (method == Method::WorkspaceMode) return RpcDisposition::ControlOnly;
+  return RpcDisposition::HostActivity;
 }
 
 }  // namespace host_rpc

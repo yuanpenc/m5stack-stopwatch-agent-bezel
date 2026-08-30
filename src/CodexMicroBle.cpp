@@ -366,6 +366,9 @@ void CodexMicroBle::begin() {
 void CodexMicroBle::poll() {
   processConnectionEvents();
   reconcileConnectionSet();
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  expireWorkspaceLease();
+#endif
   processQuotaWrites();
 #if defined(CODEX_STOPWATCH_USB_MIC)
   processPendingBootloaderRestart();
@@ -473,6 +476,11 @@ void CodexMicroBle::applyConnectionEvent(const PendingConnectionEvent& event) {
   const bool hostDisconnected =
       !event.connected && hostRpcConnectionValid_ &&
       hostRpcConnectionId_ == event.id;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  if (!event.connected && workspaceLease_.disconnect(event.id)) {
+    state_.workspaceMode = workspace_mode::Mode::Codex;
+  }
+#endif
   if (transition.becameConnected) {
     ++state_.connectionEpoch;
     state_.lastHostRpcAtMs = 0;
@@ -536,6 +544,10 @@ void CodexMicroBle::reconcileConnectionSet() {
   state_.lastHostRpcAtMs = 0;
   state_.hostRpcObserved = false;
   clearHostRpcIdentity();
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  workspaceLease_ = workspace_mode::Lease();
+  state_.workspaceMode = workspace_mode::Mode::Codex;
+#endif
   state_.dirty = true;
   const uint32_t epoch = state_.connectionEpoch;
   xSemaphoreGive(stateMutex_);
@@ -652,7 +664,8 @@ void CodexMicroBle::processOutput(const uint8_t* data, size_t length,
     return;
   }
 
-  if (handleRpc(request)) {
+  if (handleRpc(request, connectionId) ==
+      host_rpc::RpcDisposition::HostActivity) {
     noteHostRpcActivity(connectionId, peerAddress);
   }
   rpcBuffer_.clear();
@@ -750,6 +763,16 @@ void CodexMicroBle::processQuotaWrite(const uint8_t* data, size_t length,
 }
 
 #if defined(CODEX_STOPWATCH_USB_MIC)
+void CodexMicroBle::expireWorkspaceLease() {
+  if (stateMutex_ == nullptr) return;
+  xSemaphoreTake(stateMutex_, portMAX_DELAY);
+  if (workspaceLease_.expire(millis())) {
+    state_.workspaceMode = workspace_mode::Mode::Codex;
+    state_.dirty = true;
+  }
+  xSemaphoreGive(stateMutex_);
+}
+
 bool CodexMicroBle::isBootloaderRequest(const uint8_t* data,
                                         size_t length) const {
   constexpr size_t kExpectedLength = sizeof(kBootloaderRequest) - 1;
@@ -790,19 +813,22 @@ void CodexMicroBle::processPendingBootloaderRestart() {
 }
 #endif
 
-bool CodexMicroBle::handleRpc(const JsonDocument& request) {
+host_rpc::RpcDisposition CodexMicroBle::handleRpc(
+    const JsonDocument& request, uint16_t connectionId) {
   const JsonObjectConst requestObject = request.as<JsonObjectConst>();
   const char* method = requestObject["method"] | "";
   const JsonVariantConst id = requestObject["id"];
   const JsonVariantConst params = requestObject["params"];
   const host_rpc::Method supportedMethod = host_rpc::classify(requestObject);
+  const host_rpc::RpcDisposition disposition =
+      host_rpc::disposition(supportedMethod);
   Serial.printf("RPC method=%s\n", method);
 
   if (supportedMethod == host_rpc::Method::SystemVersion) {
     StaticJsonDocument<128> resultDoc;
     resultDoc["version"] = kFirmwareVersion;
     sendResult(id, resultDoc.as<JsonVariantConst>());
-    return true;
+    return disposition;
   }
 
   if (supportedMethod == host_rpc::Method::DeviceStatus) {
@@ -813,25 +839,54 @@ bool CodexMicroBle::handleRpc(const JsonDocument& request) {
     resultDoc["battery"] = batteryPercentage_;
     resultDoc["is_charging"] = charging_;
     sendResult(id, resultDoc.as<JsonVariantConst>());
-    return true;
+    return disposition;
   }
 
   if (supportedMethod == host_rpc::Method::ThreadStatus) {
     updateThreadLighting(params.as<JsonArrayConst>());
     sendSuccess(id);
-    return true;
+    return disposition;
   }
 
   if (supportedMethod == host_rpc::Method::RgbConfig) {
     sendSuccess(id);
-    return true;
+    return disposition;
   }
 
   if (supportedMethod == host_rpc::Method::LightsPreview ||
       supportedMethod == host_rpc::Method::HostFocusedApp) {
     sendSuccess(id);
-    return true;
+    return disposition;
   }
+
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  if (supportedMethod == host_rpc::Method::WorkspaceMode) {
+    const workspace_mode::Command command =
+        workspace_mode::parse(params.as<JsonObjectConst>());
+    if (command == workspace_mode::Command::Invalid) {
+      StaticJsonDocument<192> response;
+      response["id"] = id;
+      JsonObject error = response.createNestedObject("error");
+      error["code"] = -32602;
+      error["message"] = "Invalid params";
+      String json;
+      serializeJson(response, json);
+      sendJson(json);
+      return disposition;
+    }
+
+    if (stateMutex_ != nullptr && connections_.contains(connectionId)) {
+      xSemaphoreTake(stateMutex_, portMAX_DELAY);
+      if (workspaceLease_.apply(command, connectionId, millis())) {
+        state_.workspaceMode = workspaceLease_.mode();
+        state_.dirty = true;
+      }
+      xSemaphoreGive(stateMutex_);
+    }
+    sendSuccess(id);
+    return disposition;
+  }
+#endif
 
   StaticJsonDocument<192> response;
   response["id"] = id;
@@ -841,7 +896,7 @@ bool CodexMicroBle::handleRpc(const JsonDocument& request) {
   String json;
   serializeJson(response, json);
   sendJson(json);
-  return false;
+  return disposition;
 }
 
 void CodexMicroBle::sendResult(JsonVariantConst id, JsonVariantConst result) {

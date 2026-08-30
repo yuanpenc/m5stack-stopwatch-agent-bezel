@@ -123,6 +123,18 @@ private func makeRequest(mode: String) -> ProbeRequest {
             id: 4245,
             json: "{\"method\":\"v.oai.thstatus\",\"params\":[{\"id\":0,\"c\":2869614,\"b\":1,\"e\":\"off\",\"s\":0}],\"id\":4245}\n"
         )
+    case "--workspace-super":
+        return ProbeRequest(
+            mode: mode,
+            id: 4246,
+            json: "{\"method\":\"host.workspace_mode\",\"params\":{\"mode\":\"super\",\"ttl_ms\":15000},\"id\":4246}\n"
+        )
+    case "--workspace-codex":
+        return ProbeRequest(
+            mode: mode,
+            id: 4247,
+            json: "{\"method\":\"host.workspace_mode\",\"params\":{\"mode\":\"codex\"},\"id\":4247}\n"
+        )
     default:
         return ProbeRequest(
             mode: "--device-status",
@@ -151,6 +163,16 @@ private func requireSelfTest(_ condition: @autoclosure () -> Bool, _ message: St
 
 private func runSelfTest() {
     let expectedID = 4242
+    requireSelfTest(
+        makeRequest(mode: "--workspace-super").json ==
+            "{\"method\":\"host.workspace_mode\",\"params\":{\"mode\":\"super\",\"ttl_ms\":15000},\"id\":4246}\n",
+        "workspace SUPER request changed"
+    )
+    requireSelfTest(
+        makeRequest(mode: "--workspace-codex").json ==
+            "{\"method\":\"host.workspace_mode\",\"params\":{\"mode\":\"codex\"},\"id\":4247}\n",
+        "workspace Codex request changed"
+    )
     let response = Array("{\"id\":4242,\"result\":{\"ok\":true,\"padding\":\"abcdefghijklmnopqrstuvwxyz0123456789\"}}\n".utf8)
     let split = 31
     let assembler = RpcResponseAssembler(expectedID: expectedID)
@@ -319,10 +341,12 @@ let knownModes = [
     "--demo-lights",
     "--completion-idle",
     "--completion-done",
+    "--workspace-super",
+    "--workspace-codex",
     "--self-test",
 ]
 guard arguments.count <= 1, arguments.allSatisfy({ knownModes.contains($0) }) else {
-    fail("Usage: hid_rpc_probe.swift [--device-status|--demo-lights|--completion-idle|--completion-done|--self-test]")
+    fail("Usage: hid_rpc_probe.swift [--device-status|--demo-lights|--completion-idle|--completion-done|--workspace-super|--workspace-codex|--self-test]")
 }
 
 let mode = arguments.first ?? "--device-status"

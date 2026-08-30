@@ -15,6 +15,10 @@
 #include <atomic>
 
 #include "ConnectionHealth.h"
+#include "HostRpcRequest.h"
+#if defined(CODEX_STOPWATCH_USB_MIC)
+#include "WorkspaceMode.h"
+#endif
 
 struct ThreadLight {
   uint32_t color = 0;
@@ -37,6 +41,9 @@ struct CodexMicroState {
   bool hostRpcObserved = false;
   uint32_t lastHostRpcAtMs = 0;
   uint32_t connectionEpoch = 0;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  workspace_mode::Mode workspaceMode = workspace_mode::Mode::Codex;
+#endif
   bool dirty = true;
 };
 
@@ -98,12 +105,14 @@ class CodexMicroBle {
                          bool responseExpected,
                          const PeerAddress& peerAddress);
 #if defined(CODEX_STOPWATCH_USB_MIC)
+  void expireWorkspaceLease();
   bool isBootloaderRequest(const uint8_t* data, size_t length) const;
   bool isBootloaderPeerAuthorized(const PeerAddress& peerAddress) const;
   bool usbPowerPresent() const;
   void processPendingBootloaderRestart();
 #endif
-  bool handleRpc(const JsonDocument& request);
+  host_rpc::RpcDisposition handleRpc(const JsonDocument& request,
+                                     uint16_t connectionId);
   void sendResult(JsonVariantConst id, JsonVariantConst result);
   void sendSuccess(JsonVariantConst id);
   void sendJson(const String& json);
@@ -129,6 +138,7 @@ class CodexMicroBle {
   connection_health::ConnectionSet connections_;
   std::atomic<bool> connectionEventLost_{false};
 #if defined(CODEX_STOPWATCH_USB_MIC)
+  workspace_mode::Lease workspaceLease_;
   PeerAddress hostRpcPeerAddress_ = {};
   uint32_t hostRpcPeerEpoch_ = 0;
   bool hostRpcPeerValid_ = false;
