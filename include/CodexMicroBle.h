@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 imliubo
-// StopWatch port changes copyright (c) 2026 Codex Micro for StopWatch contributors
+// StopWatch port changes copyright (c) 2026 Stopwatch AgentBezel C152 contributors
 
 #pragma once
 

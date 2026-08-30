@@ -4,7 +4,7 @@
 
 Copyright (c) 2026 imliubo.
 
-StopWatch port changes copyright (c) 2026 codex-micro-4-stopwatch contributors.
+StopWatch port changes copyright (c) 2026 Stopwatch AgentBezel C152 contributors.
 
 Unless a file states otherwise, the original source code and documentation in
 this repository are licensed under the [MIT License](LICENSE).
