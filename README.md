@@ -185,11 +185,16 @@ behavior as experimental until that checklist is completed.
 
 The Codex Micro HID interface does not include account rate limits. The Swift
 companion starts a local Codex App Server using the user's existing signed-in
-context, reads `account/rateLimits/read`, and sends only this small snapshot to
-the explicitly bound watch:
+context, reads `account/rateLimits/read`, and sends this small snapshot to the
+explicitly bound watch:
 
 - remaining percentage;
 - reset countdown;
+
+In a real `--watch` run, the optional super.engineering integration also sends
+only a fixed `codex` or `super` display-mode enum over vendor HID Report ID 6.
+It never sends project, session, window, Space, workspace, prompt, or
+conversation content.
 
 It does not send an API key, access token, account identifier, prompt, task text,
 or audio to the watch. Device MAC addresses, CoreBluetooth UUIDs, usernames,

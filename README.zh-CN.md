@@ -158,11 +158,15 @@ C152 真机的休眠 / 唤醒与关机循环测试仍待完成；在完成验证
 ## 额度 companion 与隐私
 
 Codex Micro HID 接口本身不包含账户额度。Swift companion 会使用用户已有的
-本地登录状态启动 Codex App Server，读取 `account/rateLimits/read`，并且只向
-明确绑定的手表发送以下小型快照：
+本地登录状态启动 Codex App Server，读取 `account/rateLimits/read`，并向明确绑定的
+手表发送以下小型快照：
 
 - 剩余百分比；
 - reset 倒计时；
+
+在真实 `--watch` 模式中，可选的 super.engineering 集成还只会通过 vendor HID
+Report ID 6 发送固定的 `codex` 或 `super` 显示模式枚举；不会发送项目、会话、窗口、
+Space、工作区、prompt 或对话内容。
 
 它不会向手表发送 API key、access token、账户标识、prompt、任务文本或音频。
 设备 MAC、CoreBluetooth UUID、用户名、home 路径和日志都属于本机安装数据，

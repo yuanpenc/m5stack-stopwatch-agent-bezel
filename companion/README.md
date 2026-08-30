@@ -51,7 +51,7 @@ otherwise the dashboard will correctly mark quota sync stale.
 Pass `--codex-path /absolute/path/to/codex` when automatic executable discovery
 does not select the intended local Codex installation.
 
-## Optional super.engineering dedicated workspace controls
+## Optional super.engineering dedicated workspace controls and screen
 
 A real `--watch` process also listens for the four radial reports from the C152
 StopWatch:
@@ -62,6 +62,25 @@ StopWatch:
 | Up | Select Previous Project while super.engineering is in front |
 | Down | Select Next Project while super.engineering is in front |
 | Right | Select Next Tab while super.engineering is in front |
+
+With the matching USB-mic firmware installed, the same real `--watch` process
+also follows the foreground application on the StopWatch display. When
+super.engineering is in front, the watch shows a fixed `SUPER` screen with the
+four actions above. The companion sends `super` immediately and renews it every
+5 seconds; the firmware lease lasts 15 seconds. Leaving super.engineering sends
+`codex` once and cancels the renewal timer. A device attached or reattached to
+the running companion is synchronized immediately. If the companion stops, a
+write fails continuously, or the owning HID connection disappears, the watch
+returns to the Codex dashboard no later than lease expiry.
+
+Changing the foreground application while the display is asleep does not wake
+it. The firmware records the new mode and renders the correct screen the next
+time the user wakes the display. In `SUPER` mode, only the four radial swipes,
+the red power button, and the existing long-hold Travel Mode path are active.
+Agent touch, center Send, and the left/right ChatGPT physical buttons emit no
+HID action or success haptic. Any held microphone/voice control is released on
+entry. Returning to the Codex dashboard restores the existing controls. The
+USB microphone endpoint itself remains available to macOS throughout.
 
 The target is identified only by bundle identifier
 `com.zarifpour.superconductor`. If the remembered return application has
@@ -105,13 +124,20 @@ revalidates both the foreground identity and the PID/bundle pair before every
 delivery. It never posts those keys globally and does not inspect menus,
 Accessibility labels, screen coordinates, project names, session titles,
 application preferences, conversation content, keyboard text, or credentials.
-It does not run `sc`, shell commands, or AppleScript, and it does not change or
-reflash the StopWatch firmware.
+The display channel sends only the fixed `codex` or `super` mode enum, a fixed
+15-second TTL, and a local request number. It does not send project, session,
+window, Space, workspace, or user-content metadata. It does not run `sc`, shell
+commands, AppleScript, UI scraping, or private Space APIs.
 
-For rollback, restore the previously backed-up companion app and restart the
-same LaunchAgent. Optionally set the Dock assignment back to **None** and reset
-the three super.engineering shortcuts. No firmware or device-side rollback is
-required.
+For a companion-only rollback, stop the existing LaunchAgent, restore the
+previously backed-up signed companion app, verify its signature, and restart
+that same LaunchAgent. The upgraded firmware falls back to the Codex dashboard
+within 15 seconds when the old companion sends no renewal. For a complete
+two-component rollback, additionally restore the saved pre-change USB-mic
+firmware, but only after rediscovering the current `/dev/cu.*` bootloader port
+and obtaining explicit confirmation for that exact port. Never reuse a port
+from an earlier flash. Optionally set the Dock assignment back to **None** and
+reset the three super.engineering shortcuts.
 
 Useful diagnostics:
 
@@ -121,6 +147,10 @@ Useful diagnostics:
 
 # Verify BLE discovery and writes using a synthetic snapshot.
 .build/release/codex-watch-companion --demo --verbose
+
+# Direct firmware diagnostic. SUPER automatically expires after 15 seconds.
+swift ../scripts/hid_rpc_probe.swift --workspace-super
+swift ../scripts/hid_rpc_probe.swift --workspace-codex
 ```
 
 ## Optional USB-mic bootloader request
@@ -182,10 +212,13 @@ CoreBluetooth UUID, so another same-name peripheral is ignored.
 
 ## Data boundary
 
-The companion sends only the percentage and reset fields documented in
-[`docs/COMPANION_PROTOCOL.md`](../docs/COMPANION_PROTOCOL.md). Agent status,
-button events, and voice actions stay on the Codex Micro HID channel. In a real
-`--watch` run, the companion recognizes only the four fixed radial events
-described above and emits only the three fixed, process-targeted navigation key
-pairs; it does not capture keyboard text. Audio is outside this companion's
-scope.
+The companion sends the percentage and reset fields documented in
+[`docs/COMPANION_PROTOCOL.md`](../docs/COMPANION_PROTOCOL.md) over the private
+quota GATT service. In a real `--watch` run it additionally sends only the fixed
+`codex`/`super` display mode RPC over Report ID 6. Agent status, button events,
+and voice actions otherwise stay on the Codex Micro HID channel. The companion
+recognizes only the four fixed radial events described above and emits only the
+three fixed, process-targeted navigation key pairs; it does not capture
+keyboard text. It does not read or transmit project names, session titles,
+windows, Spaces, workspace state, credentials, prompts, conversation content,
+or audio. Audio is outside this companion's scope.
