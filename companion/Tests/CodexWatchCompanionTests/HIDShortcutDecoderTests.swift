@@ -3,6 +3,22 @@ import IOKit.hid
 @testable import CodexWatchCompanion
 
 @MainActor
+private final class ListenerOutputDeviceStub: StopwatchHIDOutputDevice {
+    let deviceKey: UInt
+    private(set) var writes: [[UInt8]] = []
+
+    init(deviceKey: UInt) {
+        self.deviceKey = deviceKey
+    }
+
+    func setOutputReport(reportID: Int, bytes: [UInt8]) -> IOReturn {
+        XCTAssertEqual(reportID, 6)
+        writes.append(bytes)
+        return kIOReturnSuccess
+    }
+}
+
+@MainActor
 final class HIDShortcutDecoderTests: XCTestCase {
     func testInvalidatedCallbackContextIgnoresDelayedDelivery() {
         var delivered: [HIDShortcutCallbackAction] = []
@@ -18,6 +34,61 @@ final class HIDShortcutDecoderTests: XCTestCase {
 
         XCTAssertEqual(delivered, [.matched(deviceKey: 1)])
         XCTAssertNil(HIDShortcutCallbackRegistry.session(for: context))
+    }
+
+    func testMatchedDevicesCreateIndependentWorkspaceSendersAndRemovalOnlyClearsOne() {
+        let first = ListenerOutputDeviceStub(deviceKey: 1)
+        let second = ListenerOutputDeviceStub(deviceKey: 2)
+        var attached: [UInt] = []
+        var removed: [UInt] = []
+        let listener = HIDShortcutListener(
+            eventHandler: { _ in },
+            log: { _ in },
+            workspaceSenderMatched: { attached.append($0.deviceKey) },
+            workspaceSenderRemoved: { removed.append($0) }
+        )
+
+        listener.handle(.matched(deviceKey: 1, outputDevice: first))
+        listener.handle(.matched(deviceKey: 2, outputDevice: second))
+
+        XCTAssertEqual(attached, [1, 2])
+        XCTAssertEqual(listener.activeWorkspaceSenderDeviceKeys, Set([1, 2]))
+
+        listener.handle(.removed(deviceKey: 1))
+
+        XCTAssertEqual(removed, [1])
+        XCTAssertEqual(listener.activeWorkspaceSenderDeviceKeys, Set([2]))
+        XCTAssertTrue(listener.workspaceSender(deviceKey: 2)?.send(.codex) == true)
+        XCTAssertFalse(second.writes.isEmpty)
+    }
+
+    func testStopClearsOutputHandlesWhenManagerHasNotStarted() {
+        let device = ListenerOutputDeviceStub(deviceKey: 1)
+        var removed: [UInt] = []
+        let listener = HIDShortcutListener(
+            eventHandler: { _ in },
+            log: { _ in },
+            workspaceSenderRemoved: { removed.append($0) }
+        )
+        listener.handle(.matched(deviceKey: 1, outputDevice: device))
+
+        listener.stop()
+
+        XCTAssertTrue(listener.activeWorkspaceSenderDeviceKeys.isEmpty)
+        XCTAssertEqual(removed, [1])
+    }
+
+    func testInvalidatedCallbackCannotAttachDelayedOutputDevice() {
+        let device = ListenerOutputDeviceStub(deviceKey: 9)
+        let listener = HIDShortcutListener(eventHandler: { _ in }, log: { _ in })
+        let session = HIDShortcutCallbackSession { listener.handle($0) }
+        let context = HIDShortcutCallbackRegistry.retain(session)
+        let delayedSession = HIDShortcutCallbackRegistry.session(for: context)
+
+        HIDShortcutCallbackRegistry.invalidate(context)
+        delayedSession?.deliver(.matched(deviceKey: 9, outputDevice: device))
+
+        XCTAssertTrue(listener.activeWorkspaceSenderDeviceKeys.isEmpty)
     }
 
     func testMatchingDictionaryContainsOnlyExpectedDeviceIdentity() {

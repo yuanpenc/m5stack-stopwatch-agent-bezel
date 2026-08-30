@@ -20,8 +20,24 @@ enum HIDShortcutListenerError: LocalizedError {
 
 enum HIDShortcutCallbackAction: Equatable {
     case input(reportID: Int, bytes: [UInt8], deviceKey: UInt)
-    case matched(deviceKey: UInt)
+    case matched(deviceKey: UInt, outputDevice: StopwatchHIDOutputDevice? = nil)
     case removed(deviceKey: UInt)
+
+    static func == (lhs: HIDShortcutCallbackAction, rhs: HIDShortcutCallbackAction) -> Bool {
+        switch (lhs, rhs) {
+        case let (.input(lhsReportID, lhsBytes, lhsDeviceKey),
+                  .input(rhsReportID, rhsBytes, rhsDeviceKey)):
+            return lhsReportID == rhsReportID
+                && lhsBytes == rhsBytes
+                && lhsDeviceKey == rhsDeviceKey
+        case let (.matched(lhsDeviceKey, _), .matched(rhsDeviceKey, _)):
+            return lhsDeviceKey == rhsDeviceKey
+        case let (.removed(lhsDeviceKey), .removed(rhsDeviceKey)):
+            return lhsDeviceKey == rhsDeviceKey
+        default:
+            return false
+        }
+    }
 }
 
 final class HIDShortcutCallbackSession: @unchecked Sendable {
@@ -140,16 +156,31 @@ final class HIDShortcutListener: HIDShortcutListening {
 
     private let eventHandler: (CompanionShortcutEvent) -> Void
     private let log: (String) -> Void
+    private let workspaceSenderMatched: (WorkspaceModeSending) -> Void
+    private let workspaceSenderRemoved: (UInt) -> Void
     private var lifetime: HIDShortcutManagerLifetime?
     private var decodersByDevice: [UInt: HIDShortcutDecoder] = [:]
+    private var workspaceSendersByDevice: [UInt: WorkspaceModeSending] = [:]
     private var warnedAboutPermission = false
 
     init(
         eventHandler: @escaping (CompanionShortcutEvent) -> Void,
-        log: @escaping (String) -> Void
+        log: @escaping (String) -> Void,
+        workspaceSenderMatched: @escaping (WorkspaceModeSending) -> Void = { _ in },
+        workspaceSenderRemoved: @escaping (UInt) -> Void = { _ in }
     ) {
         self.eventHandler = eventHandler
         self.log = log
+        self.workspaceSenderMatched = workspaceSenderMatched
+        self.workspaceSenderRemoved = workspaceSenderRemoved
+    }
+
+    var activeWorkspaceSenderDeviceKeys: Set<UInt> {
+        Set(workspaceSendersByDevice.keys)
+    }
+
+    func workspaceSender(deviceKey: UInt) -> WorkspaceModeSending? {
+        workspaceSendersByDevice[deviceKey]
     }
 
     func start() throws {
@@ -197,7 +228,10 @@ final class HIDShortcutListener: HIDShortcutListening {
                 guard let session = HIDShortcutCallbackRegistry.session(for: context) else { return }
                 let deviceKey = UInt(bitPattern: Unmanaged.passUnretained(device).toOpaque())
                 MainActor.assumeIsolated {
-                    session.deliver(.matched(deviceKey: deviceKey))
+                    session.deliver(.matched(
+                        deviceKey: deviceKey,
+                        outputDevice: SystemStopwatchHIDOutputDevice(device: device)
+                    ))
                 }
             },
             context
@@ -235,6 +269,7 @@ final class HIDShortcutListener: HIDShortcutListening {
             lifetime.tearDown()
             self.lifetime = nil
             decodersByDevice.removeAll()
+            removeAllWorkspaceSenders()
             throw HIDShortcutListenerError.openFailed(result)
         }
     }
@@ -242,29 +277,45 @@ final class HIDShortcutListener: HIDShortcutListening {
     func stop() {
         guard let lifetime else {
             decodersByDevice.removeAll()
+            removeAllWorkspaceSenders()
             return
         }
 
         self.lifetime = nil
         lifetime.tearDown()
         decodersByDevice.removeAll()
+        removeAllWorkspaceSenders()
     }
 
     deinit {
         lifetime?.tearDownAfterFinalRelease()
     }
 
-    private func handle(_ action: HIDShortcutCallbackAction) {
+    func handle(_ action: HIDShortcutCallbackAction) {
         switch action {
         case .input(let reportID, let bytes, let deviceKey):
             consume(reportID: reportID, bytes: bytes, deviceKey: deviceKey)
-        case .matched(let deviceKey):
+        case .matched(let deviceKey, let outputDevice):
             decodersByDevice[deviceKey] = HIDShortcutDecoder()
+            if let outputDevice {
+                let sender = WorkspaceModeHIDWriter(device: outputDevice)
+                workspaceSendersByDevice[deviceKey] = sender
+                workspaceSenderMatched(sender)
+            }
             log("StopWatch HID 已连接")
         case .removed(let deviceKey):
             decodersByDevice.removeValue(forKey: deviceKey)
+            if workspaceSendersByDevice.removeValue(forKey: deviceKey) != nil {
+                workspaceSenderRemoved(deviceKey)
+            }
             log("StopWatch HID 已断开")
         }
+    }
+
+    private func removeAllWorkspaceSenders() {
+        let deviceKeys = workspaceSendersByDevice.keys.sorted()
+        workspaceSendersByDevice.removeAll()
+        deviceKeys.forEach(workspaceSenderRemoved)
     }
 
     private func consume(reportID: Int, bytes: [UInt8], deviceKey: UInt) {
