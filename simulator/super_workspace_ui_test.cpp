@@ -35,58 +35,85 @@ struct HasRemainingPercent<
     T, std::void_t<decltype(std::declval<T>().remainingPercent)>>
     : std::true_type {};
 
-void testFixedCopyAndOrder() {
+void assertPoint(super_workspace::Point actual, int expectedX,
+                 int expectedY) {
+  assert(actual.x == expectedX);
+  assert(actual.y == expectedY);
+}
+
+void testDirectionalGeometryAndPalette() {
   using touch_gesture::Direction;
 
   assert(std::strcmp(super_workspace::kTitle, "SUPER") == 0);
-  assert(super_workspace::kCommandRows.size() == 4);
-
-  assert(super_workspace::kCommandRows[0].direction == Direction::Left);
-  assert(std::strcmp(super_workspace::kCommandRows[0].directionLabel,
-                     "LEFT") == 0);
-  assert(std::strcmp(super_workspace::kCommandRows[0].actionLabel,
-                     "BACK") == 0);
-
-  assert(super_workspace::kCommandRows[1].direction == Direction::Up);
-  assert(std::strcmp(super_workspace::kCommandRows[1].directionLabel,
-                     "UP") == 0);
-  assert(std::strcmp(super_workspace::kCommandRows[1].actionLabel,
-                     "PREV PROJECT") == 0);
-
-  assert(super_workspace::kCommandRows[2].direction == Direction::Down);
-  assert(std::strcmp(super_workspace::kCommandRows[2].directionLabel,
-                     "DOWN") == 0);
-  assert(std::strcmp(super_workspace::kCommandRows[2].actionLabel,
-                     "NEXT PROJECT") == 0);
-
-  assert(super_workspace::kCommandRows[3].direction == Direction::Right);
-  assert(std::strcmp(super_workspace::kCommandRows[3].directionLabel,
-                     "RIGHT") == 0);
-  assert(std::strcmp(super_workspace::kCommandRows[3].actionLabel,
-                     "NEXT TAB") == 0);
-}
-
-void testDedicatedVisualStateAndGeometry() {
-  using super_workspace::State;
-  using touch_gesture::Direction;
-
   static_assert(super_workspace::kWidth == 466);
   static_assert(super_workspace::kHeight == 466);
-  static_assert(super_workspace::kBackground == 0x0820);
-  static_assert(super_workspace::kAccent == 0xA2FF);
-  static_assert(super_workspace::kPanelActive == 0x4A37);
-  static_assert(super_workspace::kAccent != 0x16B6);
+  static_assert(super_workspace::kOutlineWidth == 5);
+  static_assert(super_workspace::kCenterSquare.left == 143);
+  static_assert(super_workspace::kCenterSquare.top == 143);
+  static_assert(super_workspace::kCenterSquare.right == 322);
+  static_assert(super_workspace::kCenterSquare.bottom == 322);
+  static_assert(super_workspace::kBackground == 0x0041);
+  static_assert(super_workspace::kCenterBorder == 0x372F);
 
-  for (const auto& row : super_workspace::kCommandRows) {
-    assert(super_workspace::kRowX >= 0);
-    assert(super_workspace::kRowX + super_workspace::kRowWidth <=
-           super_workspace::kWidth);
-    assert(row.centerY - super_workspace::kRowHeight / 2 >= 0);
-    assert(row.centerY + super_workspace::kRowHeight / 2 <
-           super_workspace::kBatteryTop);
+  const auto& controls = super_workspace::kDirectionalControls;
+  assert(controls.size() == 4);
+
+  assert(controls[0].direction == Direction::Up);
+  assertPoint(controls[0].baseStart, 143, 143);
+  assertPoint(controls[0].baseEnd, 322, 143);
+  assertPoint(controls[0].tip, 233, 26);
+  assertPoint(controls[0].labelAnchor, 233, 91);
+  assert(std::strcmp(controls[0].label, "PREV") == 0);
+  assert(controls[0].borderColor == 0x26DF);
+
+  assert(controls[1].direction == Direction::Right);
+  assertPoint(controls[1].baseStart, 322, 143);
+  assertPoint(controls[1].baseEnd, 322, 322);
+  assertPoint(controls[1].tip, 440, 233);
+  assertPoint(controls[1].labelAnchor, 375, 233);
+  assert(std::strcmp(controls[1].label, "TAB") == 0);
+  assert(controls[1].borderColor == 0xFCE6);
+
+  assert(controls[2].direction == Direction::Down);
+  assertPoint(controls[2].baseStart, 322, 322);
+  assertPoint(controls[2].baseEnd, 143, 322);
+  assertPoint(controls[2].tip, 233, 440);
+  assertPoint(controls[2].labelAnchor, 233, 387);
+  assert(std::strcmp(controls[2].label, "NEXT") == 0);
+  assert(controls[2].borderColor == 0xEA7F);
+
+  assert(controls[3].direction == Direction::Left);
+  assertPoint(controls[3].baseStart, 143, 322);
+  assertPoint(controls[3].baseEnd, 143, 143);
+  assertPoint(controls[3].tip, 26, 233);
+  assertPoint(controls[3].labelAnchor, 90, 233);
+  assert(std::strcmp(controls[3].label, "BACK") == 0);
+  assert(controls[3].borderColor == 0x53DF);
+
+  for (const auto& control : controls) {
+    assert(control.tip.x >= 0 && control.tip.x < super_workspace::kWidth);
+    assert(control.tip.y >= 0 && control.tip.y < super_workspace::kHeight);
   }
-  assert(super_workspace::kBatteryTop + super_workspace::kBatteryHeight <=
-         super_workspace::kHeight);
+  assert(controls[0].baseStart.x == super_workspace::kCenterSquare.left);
+  assert(controls[0].baseEnd.x == super_workspace::kCenterSquare.right);
+  assert(controls[1].baseStart.y == super_workspace::kCenterSquare.top);
+  assert(controls[1].baseEnd.y == super_workspace::kCenterSquare.bottom);
+  assert(controls[2].baseStart.x == super_workspace::kCenterSquare.right);
+  assert(controls[2].baseEnd.x == super_workspace::kCenterSquare.left);
+  assert(controls[3].baseStart.y == super_workspace::kCenterSquare.bottom);
+  assert(controls[3].baseEnd.y == super_workspace::kCenterSquare.top);
+
+  assert(controls[0].borderColor != controls[1].borderColor);
+  assert(controls[0].borderColor != controls[2].borderColor);
+  assert(controls[0].borderColor != controls[3].borderColor);
+  assert(controls[1].borderColor != controls[2].borderColor);
+  assert(controls[1].borderColor != controls[3].borderColor);
+  assert(controls[2].borderColor != controls[3].borderColor);
+}
+
+void testDedicatedVisualState() {
+  using super_workspace::State;
+  using touch_gesture::Direction;
 
   State state;
   state.batteryPercent = 63;
@@ -112,7 +139,7 @@ void testNoUserContentOrCodexTelemetryFields() {
 }  // namespace
 
 int main() {
-  testFixedCopyAndOrder();
-  testDedicatedVisualStateAndGeometry();
+  testDirectionalGeometryAndPalette();
+  testDedicatedVisualState();
   testNoUserContentOrCodexTelemetryFields();
 }

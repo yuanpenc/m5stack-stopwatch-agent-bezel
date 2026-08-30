@@ -17,24 +17,19 @@ constexpr int kWidth = 466;
 constexpr int kHeight = 466;
 constexpr int kCenterX = kWidth / 2;
 
-// SUPER uses a violet signal palette that is intentionally independent from
-// the green Codex telemetry dashboard.
-constexpr std::uint16_t kBackground = 0x0820;
+constexpr std::uint16_t kBackground = 0x0041;
+constexpr std::uint16_t kCenterFill = 0x0862;
+constexpr std::uint16_t kCenterBorder = 0x372F;
 constexpr std::uint16_t kPanel = 0x18C8;
-constexpr std::uint16_t kPanelActive = 0x4A37;
 constexpr std::uint16_t kText = 0xF7DF;
 constexpr std::uint16_t kMuted = 0x8410;
 constexpr std::uint16_t kAccent = 0xA2FF;
-constexpr std::uint16_t kConnected = 0x6E9B;
+constexpr std::uint16_t kConnected = kCenterBorder;
 constexpr std::uint16_t kWarning = 0xFDA9;
 constexpr std::uint16_t kDanger = 0xFAED;
 
 constexpr const char* kTitle = "SUPER";
-constexpr int kRowX = 30;
-constexpr int kRowWidth = 406;
-constexpr int kRowHeight = 50;
-constexpr int kBatteryTop = 401;
-constexpr int kBatteryHeight = 31;
+constexpr int kOutlineWidth = 5;
 
 enum class PowerOverlay : std::uint8_t {
   None,
@@ -42,18 +37,61 @@ enum class PowerOverlay : std::uint8_t {
   PoweringOff,
 };
 
-struct CommandRow {
-  touch_gesture::Direction direction;
-  const char* directionLabel;
-  const char* actionLabel;
-  int centerY;
+struct Point {
+  int x;
+  int y;
+
+  constexpr bool operator==(const Point& other) const {
+    return x == other.x && y == other.y;
+  }
 };
 
-static constexpr std::array<CommandRow, 4> kCommandRows = {{
-    {touch_gesture::Direction::Left, "LEFT", "BACK", 144},
-    {touch_gesture::Direction::Up, "UP", "PREV PROJECT", 206},
-    {touch_gesture::Direction::Down, "DOWN", "NEXT PROJECT", 268},
-    {touch_gesture::Direction::Right, "RIGHT", "NEXT TAB", 330},
+struct Rect {
+  int left;
+  int top;
+  int right;
+  int bottom;
+};
+
+struct DirectionalControl {
+  touch_gesture::Direction direction;
+  const char* label;
+  Point baseStart;
+  Point baseEnd;
+  Point tip;
+  Point innerBaseStart;
+  Point innerBaseEnd;
+  Point innerTip;
+  Point labelAnchor;
+  std::uint16_t borderColor;
+  std::uint16_t fillColor;
+  std::uint16_t activeBorderColor;
+  std::uint16_t activeFillColor;
+};
+
+constexpr Rect kCenterSquare{143, 143, 322, 322};
+
+static constexpr std::array<DirectionalControl, 4> kDirectionalControls = {{
+    {touch_gesture::Direction::Up,
+     "PREV",
+     {143, 143}, {322, 143}, {233, 26},
+     {149, 138}, {316, 138}, {233, 36}, {233, 91},
+     0x26DF, 0x0082, 0x673F, 0x0A09},
+    {touch_gesture::Direction::Right,
+     "TAB",
+     {322, 143}, {322, 322}, {440, 233},
+     {327, 149}, {327, 316}, {430, 233}, {375, 233},
+     0xFCE6, 0x1061, 0xFDCE, 0x4961},
+    {touch_gesture::Direction::Down,
+     "NEXT",
+     {322, 322}, {143, 322}, {233, 440},
+     {316, 327}, {149, 327}, {233, 430}, {233, 387},
+     0xEA7F, 0x1042, 0xF43F, 0x40C9},
+    {touch_gesture::Direction::Left,
+     "BACK",
+     {143, 322}, {143, 143}, {26, 233},
+     {138, 316}, {138, 149}, {36, 233}, {90, 233},
+     0x53DF, 0x0862, 0x8D1F, 0x1929},
 }};
 
 struct State {
@@ -75,48 +113,31 @@ void drawText(Surface& surface, const char* text, int x, int y,
 }
 
 template <typename Surface>
-void drawHeading(Surface& surface, const State& state) {
-  surface.loadFont(dashboard::font_data::kSpaceMono46Vlw);
-  drawText(surface, kTitle, kCenterX, 49, middle_center, kText);
-  surface.unloadFont();
+void drawDirectionalControl(Surface& surface,
+                            const DirectionalControl& control,
+                            bool active) {
+  const std::uint16_t borderColor =
+      active ? control.activeBorderColor : control.borderColor;
+  const std::uint16_t fillColor =
+      active ? control.activeFillColor : control.fillColor;
+  surface.fillTriangle(control.baseStart.x, control.baseStart.y,
+                       control.baseEnd.x, control.baseEnd.y,
+                       control.tip.x, control.tip.y, borderColor);
+  surface.fillTriangle(control.innerBaseStart.x, control.innerBaseStart.y,
+                       control.innerBaseEnd.x, control.innerBaseEnd.y,
+                       control.innerTip.x, control.innerTip.y, fillColor);
 
   surface.loadFont(dashboard::font_data::kSpaceMono18Vlw);
-  const char* status = state.connected ? "CONNECTED" : "OFFLINE";
-  const std::uint16_t statusColor = state.connected ? kConnected : kDanger;
-  drawText(surface, status, kCenterX, 92, middle_center, statusColor);
+  drawText(surface, control.label, control.labelAnchor.x,
+           control.labelAnchor.y, middle_center,
+           active ? kText : control.borderColor);
   surface.unloadFont();
 }
 
 template <typename Surface>
-void drawCommands(Surface& surface, const State& state) {
-  surface.loadFont(dashboard::font_data::kSpaceMono18Vlw);
-  for (const CommandRow& row : kCommandRows) {
-    const bool active = state.swipeDirection == row.direction;
-    const int top = row.centerY - kRowHeight / 2;
-    if (active) {
-      surface.fillSmoothRoundRect(kRowX, top, kRowWidth, kRowHeight, 15,
-                                  kAccent);
-      surface.fillSmoothRoundRect(kRowX + 4, top + 4, kRowWidth - 8,
-                                  kRowHeight - 8, 12, kPanelActive);
-    } else {
-      surface.fillSmoothRoundRect(kRowX, top, kRowWidth, kRowHeight, 15,
-                                  kPanel);
-    }
-
-    const std::uint16_t directionColor = active ? kText : kAccent;
-    const std::uint16_t actionColor = active ? kText : kMuted;
-    drawText(surface, row.directionLabel, kRowX + 22, row.centerY + 1,
-             middle_left, directionColor);
-    drawText(surface, row.actionLabel, kRowX + kRowWidth - 22,
-             row.centerY + 1, middle_right, actionColor);
-  }
-  surface.unloadFont();
-}
-
-template <typename Surface>
-void drawBattery(Surface& surface, const State& state) {
-  constexpr int batteryX = 162;
-  constexpr int batteryY = kBatteryTop + 7;
+void drawCenterBattery(Surface& surface, const State& state) {
+  constexpr int batteryX = 183;
+  constexpr int batteryY = 268;
   constexpr int batteryWidth = 31;
   constexpr int batteryHeight = 16;
   const int battery = std::max(
@@ -127,7 +148,7 @@ void drawBattery(Surface& surface, const State& state) {
   surface.fillSmoothRoundRect(batteryX, batteryY, batteryWidth, batteryHeight,
                               3, color);
   surface.fillSmoothRoundRect(batteryX + 2, batteryY + 2, batteryWidth - 4,
-                              batteryHeight - 4, 2, kBackground);
+                              batteryHeight - 4, 2, kCenterFill);
   surface.fillSmoothRoundRect(batteryX + batteryWidth, batteryY + 4, 3,
                               batteryHeight - 8, 1, color);
   if (battery > 0) {
@@ -150,9 +171,36 @@ void drawBattery(Surface& surface, const State& state) {
     std::snprintf(label, sizeof(label), "%d%%", battery);
   }
   surface.loadFont(dashboard::font_data::kSpaceMono18Vlw);
-  drawText(surface, label, 218, kBatteryTop + kBatteryHeight / 2 + 1,
+  drawText(surface, label, 224, batteryY + batteryHeight / 2 + 1,
            middle_left, color);
   surface.unloadFont();
+}
+
+template <typename Surface>
+void drawCenterPanel(Surface& surface, const State& state) {
+  surface.fillRect(kCenterSquare.left, kCenterSquare.top,
+                   kCenterSquare.right - kCenterSquare.left + 1,
+                   kCenterSquare.bottom - kCenterSquare.top + 1,
+                   kCenterBorder);
+  surface.fillRect(kCenterSquare.left + kOutlineWidth,
+                   kCenterSquare.top + kOutlineWidth,
+                   kCenterSquare.right - kCenterSquare.left + 1 -
+                       2 * kOutlineWidth,
+                   kCenterSquare.bottom - kCenterSquare.top + 1 -
+                       2 * kOutlineWidth,
+                   kCenterFill);
+
+  surface.loadFont(dashboard::font_data::kSpaceMono46Vlw);
+  drawText(surface, kTitle, kCenterX, 190, middle_center, kText);
+  surface.unloadFont();
+
+  surface.loadFont(dashboard::font_data::kSpaceMono18Vlw);
+  const char* status = state.connected ? "CONNECTED" : "OFFLINE";
+  const std::uint16_t statusColor = state.connected ? kConnected : kDanger;
+  drawText(surface, status, kCenterX, 239, middle_center, statusColor);
+  surface.unloadFont();
+
+  drawCenterBattery(surface, state);
 }
 
 template <typename Surface>
@@ -195,9 +243,11 @@ void drawPowerOverlay(Surface& surface, const State& state) {
 template <typename Surface>
 void render(Surface& surface, const State& state) {
   surface.fillScreen(kBackground);
-  drawHeading(surface, state);
-  drawCommands(surface, state);
-  drawBattery(surface, state);
+  for (const DirectionalControl& control : kDirectionalControls) {
+    drawDirectionalControl(surface, control,
+                           state.swipeDirection == control.direction);
+  }
+  drawCenterPanel(surface, state);
   drawPowerOverlay(surface, state);
 }
 
