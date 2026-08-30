@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-30
 
-**Status:** Draft for review
+**Status:** Approved
 
 **Target:** M5Stack StopWatch Dev Kit C152 running the installed USB microphone firmware, plus the existing macOS `CodexWatchCompanion`
 
@@ -381,4 +381,4 @@ written:
 - keep mode synchronization independent from Codex liveness, quota, USB audio,
   and the existing shortcut router.
 
-Final document approval remains pending review of this committed specification.
+The user reviewed and approved this committed specification on 2026-08-30.
