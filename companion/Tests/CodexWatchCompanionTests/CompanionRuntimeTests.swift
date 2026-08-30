@@ -32,10 +32,18 @@ final class CompanionRuntimeTests: XCTestCase {
     }
 
     func testOnlyRealWatchModeStartsHIDListener() throws {
-        XCTAssertTrue(try parseOptions(["companion", "--watch", "--device-id", "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"]).startsHIDShortcutListener)
-        XCTAssertFalse(try parseOptions(["companion", "--watch", "--demo"]).startsHIDShortcutListener)
-        XCTAssertFalse(try parseOptions(["companion", "--json-only"]).startsHIDShortcutListener)
-        XCTAssertFalse(try parseOptions(["companion"]).startsHIDShortcutListener)
+        let realWatch = try parseOptions(["companion", "--watch", "--device-id", "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"])
+        let demoWatch = try parseOptions(["companion", "--watch", "--demo"])
+        let jsonOnly = try parseOptions(["companion", "--json-only"])
+        let oneShot = try parseOptions(["companion"])
+        let bootloader = try parseOptions(["companion", "--enter-bootloader", "--device-id", "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"])
+
+        XCTAssertTrue(realWatch.startsHIDShortcutListener)
+        XCTAssertTrue(realWatch.startsWorkspaceModeCoordinator)
+        for options in [demoWatch, jsonOnly, oneShot, bootloader] {
+            XCTAssertFalse(options.startsHIDShortcutListener)
+            XCTAssertFalse(options.startsWorkspaceModeCoordinator)
+        }
     }
 
     func testWatchLoopReportsFailureThenRunsNextCycle() throws {

@@ -512,6 +512,10 @@ struct Options {
     var startsHIDShortcutListener: Bool {
         watch && !demo && !jsonOnly && !enterBootloader
     }
+
+    var startsWorkspaceModeCoordinator: Bool {
+        startsHIDShortcutListener
+    }
 }
 
 private func executableInPath(named executable: String) -> String? {
@@ -644,7 +648,9 @@ private func run() throws {
 
     var shortcutRouter: SuperEngineeringCommandRouter?
     var shortcutListener: HIDShortcutListener?
-    if options.startsHIDShortcutListener {
+    var workspaceModeCoordinator: WorkspaceModeCoordinator?
+    if options.startsHIDShortcutListener,
+       options.startsWorkspaceModeCoordinator {
         let workspace = NSWorkspaceApplications()
         let toggler = SuperEngineeringToggler(
             workspace: workspace,
@@ -657,22 +663,36 @@ private func run() throws {
             accessibility: SystemAccessibilityTrustChecker(),
             log: { fputs("快捷键：\($0)\n", stderr) }
         )
+        let coordinator = WorkspaceModeCoordinator(
+            log: { fputs("屏幕：\($0)\n", stderr) }
+        )
+        coordinator.start()
         let listener = HIDShortcutListener(
             eventHandler: { [weak router] event in router?.handle(event) },
-            log: { fputs("快捷键：\($0)\n", stderr) }
+            log: { fputs("快捷键：\($0)\n", stderr) },
+            workspaceSenderMatched: { [weak coordinator] sender in
+                coordinator?.attach(sender)
+            },
+            workspaceSenderRemoved: { [weak coordinator] deviceKey in
+                coordinator?.detach(deviceKey: deviceKey)
+            }
         )
         do {
             try listener.start()
             shortcutRouter = router
             shortcutListener = listener
+            workspaceModeCoordinator = coordinator
         } catch {
+            coordinator.stop()
             fputs("快捷键不可用：\(error.localizedDescription)\n", stderr)
         }
     }
     defer {
+        workspaceModeCoordinator?.stop()
         withExtendedLifetime(shortcutRouter) {
             shortcutListener?.stop()
         }
+        workspaceModeCoordinator = nil
         shortcutListener = nil
         shortcutRouter = nil
     }
