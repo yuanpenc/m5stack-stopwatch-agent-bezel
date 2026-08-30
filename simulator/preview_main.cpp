@@ -1,4 +1,4 @@
-// Native, headless, pixel-identical dashboard renderer.
+// Native, headless, pixel-identical workspace renderer.
 #include <M5GFX.h>
 
 #include <cstdint>
@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "DashboardUi.h"
+#include "SuperWorkspaceUi.h"
 
 namespace {
 
@@ -54,11 +55,21 @@ dashboard::State previewState(const char* scenario) {
   return state;
 }
 
+super_workspace::State superPreviewState() {
+  super_workspace::State state;
+  state.batteryPercent = 78;
+  state.charging = true;
+  state.connected = true;
+  state.swipeDirection = touch_gesture::Direction::Right;
+  return state;
+}
+
 bool validScenario(const char* scenario) {
   return std::strcmp(scenario, "live") == 0 ||
          std::strcmp(scenario, "ble") == 0 ||
          std::strcmp(scenario, "live-stale") == 0 ||
          std::strcmp(scenario, "offline") == 0 ||
+         std::strcmp(scenario, "super") == 0 ||
          std::strcmp(scenario, "power-hold") == 0 ||
          std::strcmp(scenario, "power-off") == 0;
 }
@@ -85,7 +96,7 @@ int main(int argc, char** argv) {
   if (!validScenario(scenario)) {
     std::fprintf(stderr,
                  "Unknown scenario '%s' (use live, ble, live-stale, offline, "
-                 "power-hold, or power-off)\n",
+                 "super, power-hold, or power-off)\n",
                  scenario);
     return 2;
   }
@@ -96,7 +107,11 @@ int main(int argc, char** argv) {
     return 1;
   }
   framebuffer.setTextWrap(false);
-  dashboard::render(framebuffer, previewState(scenario));
+  if (std::strcmp(scenario, "super") == 0) {
+    super_workspace::render(framebuffer, superPreviewState());
+  } else {
+    dashboard::render(framebuffer, previewState(scenario));
+  }
   if (!writePpm(framebuffer, outputPath)) {
     std::fprintf(stderr, "Could not write %s\n", outputPath);
     return 1;
