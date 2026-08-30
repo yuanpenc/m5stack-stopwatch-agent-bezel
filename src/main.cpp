@@ -16,7 +16,9 @@
 #include "PowerButtonGesture.h"
 #include "TouchGesture.h"
 #if defined(CODEX_STOPWATCH_USB_MIC)
+#include "SuperWorkspaceUi.h"
 #include "UsbMic.h"
+#include "WorkspaceInputPolicy.h"
 #endif
 
 namespace {
@@ -89,6 +91,9 @@ bool leftPressed = false;
 bool rightPressed = false;
 bool touchAgentPressed = false;
 bool touchSendPressed = false;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+bool touchPowerHoldCandidate = false;
+#endif
 bool touchTracking = false;
 bool voiceTapBannerVisible = false;
 bool voiceClickReleasePending = false;
@@ -134,9 +139,15 @@ bool renderedQuotaStale = false;
 int8_t renderedBatteryPercent = -1;
 bool renderedCharging = false;
 bool renderedDocked = false;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+bool renderedWorkspaceModeValid = false;
+workspace_mode::Mode renderedWorkspaceMode = workspace_mode::Mode::Codex;
+bool renderedConnected = false;
+#endif
 
 void drawScreen();
 void stopHaptic();
+void clearTouchCandidate();
 [[noreturn]] void enterTravelPowerOff();
 
 void setPanelRail(bool enabled) {
@@ -400,6 +411,61 @@ dashboard::LinkHealth dashboardLinkHealth(connection_health::Link link) {
   return dashboard::LinkHealth::Offline;
 }
 
+float currentPowerHoldProgress() {
+  if (!touchPowerHoldConsumed) return 0.0f;
+  const uint32_t heldMs = millis() - touchSendStartedAtMs;
+  return std::max(
+      0.0f, std::min(1.0f,
+          static_cast<float>(heldMs - kPowerHoldPromptMs) /
+              static_cast<float>(kTravelPowerOffMs - kPowerHoldPromptMs)));
+}
+
+#if defined(CODEX_STOPWATCH_USB_MIC)
+bool superWorkspaceActive() {
+  return state.workspaceMode == workspace_mode::Mode::Super;
+}
+
+workspace_input::Control controlForSwipe(
+    touch_gesture::Direction direction) {
+  switch (direction) {
+    case touch_gesture::Direction::Up:
+      return workspace_input::Control::SwipeUp;
+    case touch_gesture::Direction::Right:
+      return workspace_input::Control::SwipeRight;
+    case touch_gesture::Direction::Down:
+      return workspace_input::Control::SwipeDown;
+    case touch_gesture::Direction::Left:
+      return workspace_input::Control::SwipeLeft;
+    case touch_gesture::Direction::None:
+      return workspace_input::Control::Agent;
+  }
+  return workspace_input::Control::Agent;
+}
+
+super_workspace::PowerOverlay superPowerOverlay() {
+  switch (powerOverlay) {
+    case dashboard::PowerOverlay::None:
+      return super_workspace::PowerOverlay::None;
+    case dashboard::PowerOverlay::HoldToPowerOff:
+      return super_workspace::PowerOverlay::HoldToPowerOff;
+    case dashboard::PowerOverlay::PoweringOff:
+      return super_workspace::PowerOverlay::PoweringOff;
+  }
+  return super_workspace::PowerOverlay::None;
+}
+
+super_workspace::State superWorkspaceState() {
+  super_workspace::State ui;
+  ui.batteryPercent = batteryPercent;
+  ui.charging = charging;
+  ui.connected = state.connected;
+  ui.swipeDirection = activeSwipe;
+  ui.powerOverlay = superPowerOverlay();
+  ui.powerHoldProgress = currentPowerHoldProgress();
+  return ui;
+}
+#endif
+
 dashboard::State dashboardState() {
   dashboard::State ui;
   const connection_health::Result health = connectionHealth();
@@ -419,29 +485,38 @@ dashboard::State dashboardState() {
   ui.completedAgent =
       completionBanner.visible(millis()) ? completionBanner.agent : -1;
   ui.powerOverlay = powerOverlay;
-  if (touchPowerHoldConsumed) {
-    const uint32_t heldMs = millis() - touchSendStartedAtMs;
-    ui.powerHoldProgress = std::max(
-        0.0f, std::min(1.0f,
-            static_cast<float>(heldMs - kPowerHoldPromptMs) /
-                static_cast<float>(kTravelPowerOffMs - kPowerHoldPromptMs)));
-  }
+  ui.powerHoldProgress = currentPowerHoldProgress();
   for (int i = 0; i < 6; ++i) ui.threads[i] = threadVisual(state.threads[i]);
   return ui;
 }
 
 void drawScreen() {
   if (deskSleeping) return;
-  const dashboard::State ui = dashboardState();
-  dashboard::render(canvas, ui);
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  if (superWorkspaceActive()) {
+    super_workspace::render(canvas, superWorkspaceState());
+    renderedHealthValid = false;
+    renderedWorkspaceModeValid = true;
+    renderedWorkspaceMode = state.workspaceMode;
+    renderedConnected = state.connected;
+  } else {
+#endif
+    const dashboard::State ui = dashboardState();
+    dashboard::render(canvas, ui);
+    renderedHealthValid = true;
+    renderedLinkHealth = ui.linkHealth;
+    renderedQuotaStale = ui.quotaStale;
+    renderedDocked = ui.docked;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+    renderedWorkspaceModeValid = true;
+    renderedWorkspaceMode = state.workspaceMode;
+    renderedConnected = state.connected;
+  }
+#endif
+  renderedBatteryPercent = batteryPercent;
+  renderedCharging = charging;
   canvas.pushSprite(0, 0);
   lastDrawMs = millis();
-  renderedHealthValid = true;
-  renderedLinkHealth = ui.linkHealth;
-  renderedQuotaStale = ui.quotaStale;
-  renderedBatteryPercent = ui.batteryPercent;
-  renderedCharging = ui.charging;
-  renderedDocked = ui.docked;
 }
 
 int8_t agentAtPoint(int x, int y) {
@@ -478,6 +553,14 @@ void beginTouchSend() {
   drawScreen();
 }
 
+#if defined(CODEX_STOPWATCH_USB_MIC)
+void beginTouchPowerHoldCandidate() {
+  touchPowerHoldCandidate = true;
+  touchSendStartedAtMs = millis();
+  touchPowerHoldConsumed = false;
+}
+#endif
+
 void commitTouchSend() {
   if (!touchSendPressed) return;
   startHaptic(kTouchHapticIntensity, kTouchHapticDurationMs);
@@ -492,6 +575,9 @@ void commitTouchSend() {
 void clearTouchCandidate() {
   touchAgentPressed = false;
   touchSendPressed = false;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  touchPowerHoldCandidate = false;
+#endif
   activeTouchAgent = -1;
 }
 
@@ -504,6 +590,16 @@ void beginTouchGesture(int x, int y) {
   const int8_t agent = agentAtPoint(x, y);
   Serial.printf("TOUCH begin x=%d y=%d agent=%d send=%d\n", x, y, agent,
                 dashboard::sendAtPoint(x, y) ? 1 : 0);
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  if (superWorkspaceActive()) {
+    if (dashboard::sendAtPoint(x, y) && workspace_input::allowed(
+            state.workspaceMode,
+            workspace_input::Control::CenterPowerHold)) {
+      beginTouchPowerHoldCandidate();
+    }
+    return;
+  }
+#endif
   if (agent >= 0) {
     beginTouchAgent(agent);
   } else if (dashboard::sendAtPoint(x, y)) {
@@ -519,6 +615,12 @@ void updateTouchGesture(int x, int y) {
   const touch_gesture::Direction direction = touch_gesture::classifySwipe(
       x - touchStartX, y - touchStartY, kSwipeThresholdPx);
   if (direction == touch_gesture::Direction::None) return;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  if (!workspace_input::allowed(state.workspaceMode,
+                                controlForSwipe(direction))) {
+    return;
+  }
+#endif
 
   clearTouchCandidate();
   activeSwipe = direction;
@@ -554,6 +656,13 @@ void finishTouchGesture() {
     return;
   }
 
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  if (superWorkspaceActive()) {
+    clearTouchCandidate();
+    return;
+  }
+#endif
+
   if (touchAgentPressed) {
     commitTouchAgent();
   } else if (touchSendPressed) {
@@ -565,13 +674,24 @@ void finishTouchGesture() {
 
 void updateTouchPowerHold() {
   if (!touchTracking || activeSwipe != touch_gesture::Direction::None) return;
-  if (!touchSendPressed && !touchPowerHoldConsumed) return;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  const bool hasPowerHoldCandidate =
+      touchSendPressed || touchPowerHoldCandidate;
+#else
+  const bool hasPowerHoldCandidate = touchSendPressed;
+#endif
+  if (!hasPowerHoldCandidate && !touchPowerHoldConsumed) {
+    return;
+  }
 
   const uint32_t now = millis();
   const uint32_t heldMs = now - touchSendStartedAtMs;
   if (!touchPowerHoldConsumed && heldMs >= kPowerHoldPromptMs) {
     touchPowerHoldConsumed = true;
     touchSendPressed = false;  // releasing now must not emit Send
+#if defined(CODEX_STOPWATCH_USB_MIC)
+    touchPowerHoldCandidate = false;
+#endif
     powerOverlay = dashboard::PowerOverlay::HoldToPowerOff;
     lastPowerOverlayDrawMs = 0;
     startHaptic(kButtonHapticIntensity, kButtonHapticDurationMs);
@@ -602,6 +722,15 @@ void startCompletionChime(int8_t agent) {
 bool expireCompletionBanner(uint32_t now) {
   return completionBanner.expire(now);
 }
+
+#if defined(CODEX_STOPWATCH_USB_MIC)
+void synchronizeAgentStatusBaseline(const CodexMicroState& latest) {
+  for (int i = 0; i < 6; ++i) {
+    previousAgentStatuses[i] = classifyAgent(latest.threads[i]);
+    agentStatusObserved[i] = true;
+  }
+}
+#endif
 
 void detectAgentTransitions(const CodexMicroState& latest) {
   for (int i = 0; i < 6; ++i) {
@@ -707,6 +836,37 @@ void releaseControlsForPowerOff() {
   delay(80);
   codex.poll();
 }
+
+#if defined(CODEX_STOPWATCH_USB_MIC)
+void handleWorkspaceModeTransition(workspace_mode::Mode previous,
+                                   workspace_mode::Mode next) {
+  if (previous == next) return;
+
+  // A mode boundary must never inherit an in-flight Codex or SUPER press.
+  if (leftPressed) {
+    codex.sendKey(kLeftMicSwitch, 0);
+    leftPressed = false;
+  }
+  if (voiceClickReleasePending) {
+    codex.sendKey(kVoiceChatCommandKey, 0);
+    voiceClickReleasePending = false;
+  }
+  if (activeSwipe != touch_gesture::Direction::None) {
+    codex.sendJoystick(touch_gesture::normalizedAngle(activeSwipe), 0.0f);
+    activeSwipe = touch_gesture::Direction::None;
+  }
+  rightPressed = false;
+  voiceTapBannerVisible = false;
+  touchTracking = false;
+  touchPowerHoldConsumed = false;
+  powerOverlay = dashboard::PowerOverlay::None;
+  completionBanner.clear();
+  clearTouchCandidate();
+  stopHaptic();
+  Serial.printf("WORKSPACE mode=%s\n",
+                next == workspace_mode::Mode::Super ? "super" : "codex");
+}
+#endif
 
 [[noreturn]] void enterTravelPowerOff() {
   touchPowerHoldConsumed = true;
@@ -911,6 +1071,22 @@ void setup() {
 void loop() {
   M5.update();
   codex.poll();
+  bool shouldRedraw = false;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  CodexMicroState latest = codex.snapshot();
+  shouldRedraw = latest.dirty;
+  const workspace_mode::Mode previousWorkspaceMode = state.workspaceMode;
+  handleWorkspaceModeTransition(previousWorkspaceMode, latest.workspaceMode);
+  state = latest;
+  if (shouldRedraw) {
+    if (state.workspaceMode == workspace_mode::Mode::Super ||
+        previousWorkspaceMode == workspace_mode::Mode::Super) {
+      synchronizeAgentStatusBaseline(state);
+    } else {
+      detectAgentTransitions(state);
+    }
+  }
+#endif
   updatePowerButton();
 
   const auto touch = M5.Touch.getDetail();
@@ -938,54 +1114,113 @@ void loop() {
   // Physical validation on the C152 enclosure: BtnA/GPIO2 is the left key and
   // BtnB/GPIO1 is the right key.
   if (M5.BtnA.wasPressed()) {
-    noteActivity();  // physical keys act even from a dark screen
-    Serial.printf("BUTTON physical=left key=%s action=press\n", kLeftMicSwitch);
-    pressMicSwitch(kLeftMicSwitch, leftPressed);
+#if defined(CODEX_STOPWATCH_USB_MIC)
+    if (workspace_input::allowed(
+            state.workspaceMode,
+            workspace_input::Control::LeftPhysicalButton)) {
+#endif
+      noteActivity();  // physical keys act even from a dark screen
+      Serial.printf("BUTTON physical=left key=%s action=press\n",
+                    kLeftMicSwitch);
+      pressMicSwitch(kLeftMicSwitch, leftPressed);
+#if defined(CODEX_STOPWATCH_USB_MIC)
+    }
+#endif
   }
   if (M5.BtnA.wasReleased()) {
-    Serial.printf("BUTTON physical=left key=%s action=release\n", kLeftMicSwitch);
-    releaseMicSwitch(kLeftMicSwitch, leftPressed);
+#if defined(CODEX_STOPWATCH_USB_MIC)
+    if (workspace_input::allowed(
+            state.workspaceMode,
+            workspace_input::Control::LeftPhysicalButton)) {
+#endif
+      Serial.printf("BUTTON physical=left key=%s action=release\n",
+                    kLeftMicSwitch);
+      releaseMicSwitch(kLeftMicSwitch, leftPressed);
+#if defined(CODEX_STOPWATCH_USB_MIC)
+    }
+#endif
   }
   if (M5.BtnB.wasPressed()) {
-    noteActivity();
-    rightPressedAtMs = millis();
-    rightPressed = true;
-    voiceTapBannerVisible = true;
-    voiceTapBannerUntilMs = millis() + kVoiceTapBannerMs;
-    startHaptic(kButtonHapticIntensity, kButtonHapticDurationMs);
-    drawScreen();
+#if defined(CODEX_STOPWATCH_USB_MIC)
+    if (workspace_input::allowed(
+            state.workspaceMode,
+            workspace_input::Control::RightPhysicalButton)) {
+#endif
+      noteActivity();
+      rightPressedAtMs = millis();
+      rightPressed = true;
+      voiceTapBannerVisible = true;
+      voiceTapBannerUntilMs = millis() + kVoiceTapBannerMs;
+      startHaptic(kButtonHapticIntensity, kButtonHapticDurationMs);
+      drawScreen();
+#if defined(CODEX_STOPWATCH_USB_MIC)
+    }
+#endif
   }
   if (M5.BtnB.wasReleased()) {
-    const uint32_t heldMs = millis() - rightPressedAtMs;
-    rightPressed = false;
-    beginVoiceChatClick();
-    Serial.printf("BUTTON physical=right key=%s physical_hold=%lums click_pulse=%lums\n",
-                  kVoiceChatCommandKey, static_cast<unsigned long>(heldMs),
-                  static_cast<unsigned long>(kVoiceClickPulseMs));
-    drawScreen();
+#if defined(CODEX_STOPWATCH_USB_MIC)
+    const bool commitRightRelease =
+        rightPressed && workspace_input::allowed(
+                            state.workspaceMode,
+                            workspace_input::Control::RightPhysicalButton);
+#else
+    constexpr bool commitRightRelease = true;
+#endif
+    if (commitRightRelease) {
+      const uint32_t heldMs = millis() - rightPressedAtMs;
+      rightPressed = false;
+      beginVoiceChatClick();
+      Serial.printf(
+          "BUTTON physical=right key=%s physical_hold=%lums "
+          "click_pulse=%lums\n",
+          kVoiceChatCommandKey, static_cast<unsigned long>(heldMs),
+          static_cast<unsigned long>(kVoiceClickPulseMs));
+      drawScreen();
+    } else {
+      rightPressed = false;
+    }
   }
-
+#if !defined(CODEX_STOPWATCH_USB_MIC)
   CodexMicroState latest = codex.snapshot();
-  const bool shouldRedraw = latest.dirty;
+  shouldRedraw = latest.dirty;
   if (shouldRedraw) {
     detectAgentTransitions(latest);
   }
   state = latest;
+#endif
   updatePowerTelemetry();
   const bool completionBannerExpired = expireCompletionBanner(millis());
 
-  const dashboard::State currentUi = dashboardState();
-  const bool derivedStateChanged =
-      !renderedHealthValid || currentUi.linkHealth != renderedLinkHealth ||
-      currentUi.quotaStale != renderedQuotaStale ||
-      currentUi.batteryPercent != renderedBatteryPercent ||
-      currentUi.charging != renderedCharging || currentUi.docked != renderedDocked;
+  bool derivedStateChanged = false;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  if (superWorkspaceActive()) {
+    derivedStateChanged =
+        !renderedWorkspaceModeValid ||
+        renderedWorkspaceMode != state.workspaceMode ||
+        renderedConnected != state.connected ||
+        renderedBatteryPercent != batteryPercent ||
+        renderedCharging != charging;
+  } else
+#endif
+  {
+    const dashboard::State currentUi = dashboardState();
+    derivedStateChanged =
+        !renderedHealthValid || currentUi.linkHealth != renderedLinkHealth ||
+        currentUi.quotaStale != renderedQuotaStale ||
+        currentUi.batteryPercent != renderedBatteryPercent ||
+        currentUi.charging != renderedCharging ||
+        currentUi.docked != renderedDocked;
+  }
   if (!deskSleeping &&
       (shouldRedraw || derivedStateChanged || completionBannerExpired)) {
     drawScreen();
   }
 
-  if (appliedBrightness > 0 && state.quota.available &&
+  if (appliedBrightness > 0 &&
+#if defined(CODEX_STOPWATCH_USB_MIC)
+      !superWorkspaceActive() &&
+#endif
+      state.quota.available &&
       millis() - lastDrawMs > 30000) {
     drawScreen();
   }

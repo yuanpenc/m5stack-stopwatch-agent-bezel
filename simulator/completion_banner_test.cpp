@@ -10,6 +10,11 @@ int main() {
 
   banner.show(2, 100, 5000);
   assert(banner.visible(100));
+  banner.clear();
+  assert(!banner.visible(100));
+  assert(banner.agent == -1);
+
+  banner.show(2, 100, 5000);
   assert(banner.visible(5099));
   assert(!banner.expire(5099));
   assert(!banner.visible(5100));

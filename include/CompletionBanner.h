@@ -16,6 +16,11 @@ struct Timer {
     until_ms = now + duration_ms;
   }
 
+  void clear() {
+    agent = -1;
+    until_ms = 0;
+  }
+
   bool visible(std::uint32_t now) const {
     return agent >= 0 &&
            static_cast<std::int32_t>(until_ms - now) > 0;
@@ -23,8 +28,7 @@ struct Timer {
 
   bool expire(std::uint32_t now) {
     if (agent < 0 || visible(now)) return false;
-    agent = -1;
-    until_ms = 0;
+    clear();
     return true;
   }
 };
