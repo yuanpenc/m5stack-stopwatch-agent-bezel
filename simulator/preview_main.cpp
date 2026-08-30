@@ -55,12 +55,22 @@ dashboard::State previewState(const char* scenario) {
   return state;
 }
 
-super_workspace::State superPreviewState() {
+super_workspace::State superPreviewState(const char* scenario) {
   super_workspace::State state;
   state.batteryPercent = 78;
-  state.charging = true;
   state.connected = true;
-  state.swipeDirection = touch_gesture::Direction::Right;
+
+  if (std::strcmp(scenario, "super-active-right") == 0) {
+    state.swipeDirection = touch_gesture::Direction::Right;
+  } else if (std::strcmp(scenario, "super-offline") == 0) {
+    state.connected = false;
+    state.batteryPercent = 18;
+  } else if (std::strcmp(scenario, "super-charging") == 0) {
+    state.charging = true;
+  } else if (std::strcmp(scenario, "super-power-hold") == 0) {
+    state.powerOverlay = super_workspace::PowerOverlay::HoldToPowerOff;
+    state.powerHoldProgress = 0.56f;
+  }
   return state;
 }
 
@@ -70,6 +80,10 @@ bool validScenario(const char* scenario) {
          std::strcmp(scenario, "live-stale") == 0 ||
          std::strcmp(scenario, "offline") == 0 ||
          std::strcmp(scenario, "super") == 0 ||
+         std::strcmp(scenario, "super-active-right") == 0 ||
+         std::strcmp(scenario, "super-offline") == 0 ||
+         std::strcmp(scenario, "super-charging") == 0 ||
+         std::strcmp(scenario, "super-power-hold") == 0 ||
          std::strcmp(scenario, "power-hold") == 0 ||
          std::strcmp(scenario, "power-off") == 0;
 }
@@ -96,7 +110,8 @@ int main(int argc, char** argv) {
   if (!validScenario(scenario)) {
     std::fprintf(stderr,
                  "Unknown scenario '%s' (use live, ble, live-stale, offline, "
-                 "super, power-hold, or power-off)\n",
+                 "super, super-active-right, super-offline, super-charging, "
+                 "super-power-hold, power-hold, or power-off)\n",
                  scenario);
     return 2;
   }
@@ -107,8 +122,8 @@ int main(int argc, char** argv) {
     return 1;
   }
   framebuffer.setTextWrap(false);
-  if (std::strcmp(scenario, "super") == 0) {
-    super_workspace::render(framebuffer, superPreviewState());
+  if (std::strncmp(scenario, "super", 5) == 0) {
+    super_workspace::render(framebuffer, superPreviewState(scenario));
   } else {
     dashboard::render(framebuffer, previewState(scenario));
   }
