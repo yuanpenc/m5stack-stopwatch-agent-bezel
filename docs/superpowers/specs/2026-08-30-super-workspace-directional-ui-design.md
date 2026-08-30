@@ -1,6 +1,6 @@
 # StopWatch SUPER Directional UI Redesign
 
-**Status:** Approved for implementation
+**Status:** Implemented; native preview approved
 **Date:** 2026-08-30
 **Target:** M5Stack StopWatch Dev Kit C152, USB-microphone firmware only
 
@@ -140,6 +140,12 @@ Implementation follows test-first development:
 The default wireless firmware is not built or flashed for this change.
 Companion tests and installation are unaffected, but a final read-only runtime
 check will confirm the existing Companion and quota loop remain healthy.
+
+Implementation verification completed with all nine native tests, the five
+466 × 466 native preview states, and both USB-microphone PlatformIO build
+environments. The generated preview was approved by the user. These checks do
+not claim that the redesigned screen has been observed on physical C152
+hardware.
 
 ## Installation Boundary
 
