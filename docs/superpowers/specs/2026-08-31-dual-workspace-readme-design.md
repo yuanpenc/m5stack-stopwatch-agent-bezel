@@ -197,6 +197,11 @@ and README structure checks passed. The tracked-tree privacy scan found no
 credential pattern or personal `/Users/...` path; commit metadata is limited to
 GitHub noreply addresses; and `git diff --check` passed.
 
+The local README image-path check passed: both `README.md` and
+`README.zh-CN.md` reference `artifacts/dashboard-preview-v2-round.png` and
+`artifacts/super-workspace-preview.png`, and both paths resolve to tracked
+assets.
+
 This verification made no firmware flash, installed Companion change,
 LaunchAgent action, macOS permission change, or device configuration change.
 
