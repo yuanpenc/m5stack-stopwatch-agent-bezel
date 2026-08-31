@@ -3,8 +3,8 @@
 **Status:** Implemented and verified
 
 **Verification scope:** Local implementation, compatibility, build, and privacy
-evidence is verified. The GitHub description/topics update and remote `main`
-equality publication gate remain pending Task 3.
+evidence is verified. Task 3 verified the GitHub description/topics update and
+remote `main` equality publication gate.
 
 **Date:** 2026-08-30
 
