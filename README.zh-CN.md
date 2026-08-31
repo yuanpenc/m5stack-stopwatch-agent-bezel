@@ -3,12 +3,13 @@
 [English](README.md)
 
 **Stopwatch AgentBezel C152** 是面向 **M5Stack StopWatch Dev Kit C152**
-的独立开源 AI Agent 控制界面，支持 Codex Micro 兼容控制、本地额度面板、
+的独立、非官方的开源 AI Agent 控制界面，支持 Codex Micro 兼容控制、本地额度面板、
 super.engineering 专属工作区和可选 USB 麦克风。
 
 项目的公开品牌名是 Stopwatch AgentBezel C152。为保持现有蓝牙配对、音频设备
 选择、macOS 权限和自动启动继续有效，`Codex Micro`、`Codex StopWatch Mic`
 和 `CodexWatchCompanion` 等兼容性运行时名称有意保持不变。
+Codex Micro 兼容性为实验性且未文档化功能。
 
 ![466 x 466 原生仪表盘预览](artifacts/dashboard-preview-v2-round.png)
 

@@ -2,7 +2,7 @@
 
 [简体中文](README.zh-CN.md)
 
-**Stopwatch AgentBezel C152** is an independent, open-source AI agent control
+**Stopwatch AgentBezel C152** is an independent, unofficial, open-source AI agent control
 surface for the **M5Stack StopWatch Dev Kit C152**. It provides Codex
 Micro-compatible controls, a local quota dashboard, a dedicated
 super.engineering workspace, and an optional USB microphone.
@@ -11,6 +11,7 @@ The public project brand is Stopwatch AgentBezel C152. Compatibility-facing
 runtime names such as `Codex Micro`, `Codex StopWatch Mic`, and
 `CodexWatchCompanion` intentionally remain unchanged so existing pairing,
 audio selection, permissions, and automatic startup continue to work.
+Codex Micro compatibility is experimental and undocumented.
 
 ![Native 466 x 466 dashboard preview](artifacts/dashboard-preview-v2-round.png)
 
