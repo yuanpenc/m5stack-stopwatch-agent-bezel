@@ -57,9 +57,9 @@ Below the gallery, a compact comparison summarizes the input model:
 
 | Input | Codex Micro workspace | super.engineering workspace |
 | --- | --- | --- |
-| Left physical button | Push to talk | No action |
-| Right physical button | Toggle Voice Chat | No action |
-| Center tap | Send | No action |
+| Left physical button | Push to talk | No action with matching `usb-mic` firmware |
+| Right physical button | Toggle Voice Chat | No action with matching `usb-mic` firmware |
+| Center tap | Send | No action with matching `usb-mic` firmware |
 | Swipe left | User-configurable Codex Micro direction | Enter or leave super.engineering |
 | Swipe up | User-configurable Codex Micro direction | Previous project |
 | Swipe down | User-configurable Codex Micro direction | Next project |
@@ -194,8 +194,11 @@ Mic`, `CodexWatchCompanion`, `codex-watch-companion`, and
 no runtime or configuration source changes under `src`, `include`,
 `companion`, `scripts`, `usb-mic`, or `platformio.ini`. Local asset, dimension,
 and README structure checks passed. The tracked-tree privacy scan found no
-credential pattern or personal `/Users/...` path; commit metadata is limited to
-GitHub noreply addresses; and `git diff --check` passed.
+credential pattern or personal absolute macOS home path; commit metadata is
+limited to GitHub noreply addresses; and `git diff --check` passed. The final
+review correction also verifies that both README control tables condition
+device-side input isolation on the matching `usb-mic` firmware and preserve
+the default firmware's Codex Micro controls.
 
 The local README image-path check passed: both `README.md` and
 `README.zh-CN.md` reference `artifacts/dashboard-preview-v2-round.png` and

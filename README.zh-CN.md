@@ -29,14 +29,17 @@ Send 和可配置方向。super.engineering 是可选的前台感知集成，用
 
 | StopWatch 输入 | Codex Micro 工作区 | super.engineering 工作区 |
 | --- | --- | --- |
-| 长按左侧实体键 | Push to talk | 无动作 |
-| 按右侧实体键 | 切换 Voice Chat | 无动作 |
-| 点击中央 | Send | 无动作 |
+| 长按左侧实体键 | Push to talk | 无动作¹ |
+| 按右侧实体键 | 切换 Voice Chat | 无动作¹ |
+| 点击中央 | Send | 无动作¹ |
 | 向左滑动 | 用户可配置方向 | 进入或离开 super.engineering |
 | 向上滑动 | 用户可配置方向 | 上一个项目 |
 | 向下滑动 | 用户可配置方向 | 下一个项目 |
 | 向右滑动 | 用户可配置方向 | 下一个会话标签页 |
 | 电源控制 | 桌面休眠和旅行模式 | 相同电源行为 |
+
+¹ 设备侧输入隔离需要匹配的 `usb-mic` 固件。使用默认固件时，这些实体按键和
+中央 Send 控件仍保留 Codex Micro 行为。
 
 ## Codex Micro 工作区
 

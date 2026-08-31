@@ -33,14 +33,18 @@ experience remains available.
 
 | StopWatch input | Codex Micro workspace | super.engineering workspace |
 | --- | --- | --- |
-| Hold left physical button | Push to talk | No action |
-| Press right physical button | Toggle Voice Chat | No action |
-| Tap center | Send | No action |
+| Hold left physical button | Push to talk | No action¹ |
+| Press right physical button | Toggle Voice Chat | No action¹ |
+| Tap center | Send | No action¹ |
 | Swipe left | User-configurable direction | Enter or leave super.engineering |
 | Swipe up | User-configurable direction | Previous project |
 | Swipe down | User-configurable direction | Next project |
 | Swipe right | User-configurable direction | Next session tab |
 | Power controls | Desk sleep and Travel Mode | Same power behavior |
+
+¹ Device-side input isolation requires the matching `usb-mic` firmware. With
+the default firmware, these physical-button and center-Send controls retain
+their Codex Micro behavior.
 
 ## Codex Micro workspace
 
