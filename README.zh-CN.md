@@ -287,11 +287,25 @@ swift build -c release
 
 ## 致谢、许可证与商标
 
-本项目在 MIT License 下改编了
-[`imliubo/codex-micro-4-core2`](https://github.com/imliubo/codex-micro-4-core2)
-的部分 BLE 兼容层。感谢原作者的工作；适用 attribution 保留在 [LICENSE](LICENSE)
-和 [NOTICE.md](NOTICE.md) 中。StopWatch UI、电源逻辑、额度 companion 和可选 USB
-麦克风是本移植新增的部分。Space Mono 继续使用 `assets/fonts/OFL.txt` 中的 SIL
+本仓库属于一条持续演进的开源实现谱系：
+
+1. [`imliubo/codex-micro-4-core2`](https://github.com/imliubo/codex-micro-4-core2)
+   较早在 M5Stack Core2 上实现了 Codex Micro 兼容能力，也是部分 BLE vendor-HID
+   兼容层的实现参考。
+2. [`digitsisyph/codex-micro-stopwatch`](https://github.com/digitsisyph/codex-micro-stopwatch)
+   将其中部分 BLE 兼容层改编到 M5Stack StopWatch C152，并进一步加入 StopWatch
+   UI、电源逻辑、额度 Companion 和可选 USB 麦克风；本仓库直接建立在这套代码基础上。
+3. **Stopwatch AgentBezel C152** 延续 StopWatch 代码线，增加 Codex Micro 与可选
+   super.engineering 双工作区、Companion 联动和独立 SUPER 屏幕。
+
+这里描述的是实现谱系，并不表示这些仓库是运行时包依赖，也不表示它们彼此存在官方
+隶属关系。后续每一层实现都依赖、引用并扩展了前人的开源成果。再次分发时，请保留原始
+声明，清楚说明自己的修改，明确引用所依赖的项目，并在合适时将通用修复回馈上游；
+同时尊重每一位维护者和贡献者。健康的开源生态需要共同守护：大家一起维护兼容性，
+也一起维护开放协作的公共成果。
+
+改编代码与本项目变更依据 MIT License 分发，适用归属保留在 [LICENSE](LICENSE)
+和 [NOTICE.md](NOTICE.md) 中。Space Mono 继续使用 `assets/fonts/OFL.txt` 中的 SIL
 Open Font License 1.1。
 
 OpenAI 关于原始设备的说明见

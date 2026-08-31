@@ -342,13 +342,33 @@ button sends `ACT09`, not `ACT11`.
 
 ## Acknowledgements, license, and trademarks
 
-This project adapts portions of the BLE compatibility layer from
-[`imliubo/codex-micro-4-core2`](https://github.com/imliubo/codex-micro-4-core2)
-under the MIT License. We thank its author and preserve applicable attribution
-in [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md). The StopWatch UI, power
-behavior, quota companion, and optional USB microphone are this port's own
-additions. Space Mono remains under the SIL Open Font License 1.1 in
-`assets/fonts/OFL.txt`.
+This repository belongs to an open-source implementation lineage:
+
+1. [`imliubo/codex-micro-4-core2`](https://github.com/imliubo/codex-micro-4-core2)
+   established an earlier Codex Micro compatibility implementation for M5Stack
+   Core2 and is the implementation reference for portions of the BLE vendor-HID
+   compatibility layer.
+2. [`digitsisyph/codex-micro-stopwatch`](https://github.com/digitsisyph/codex-micro-stopwatch)
+   adapts portions of that BLE layer for the M5Stack StopWatch C152, then adds
+   the StopWatch UI, power behavior, quota companion, and optional USB
+   microphone. It is the direct codebase on which this repository builds.
+3. **Stopwatch AgentBezel C152** continues the StopWatch codebase with the dual
+   Codex Micro and optional super.engineering workspaces, including the
+   Companion integration and dedicated SUPER display.
+
+This is an implementation lineage, not a claim that the repositories are
+runtime package dependencies or officially affiliated projects. Each later
+step depends on, cites, and extends earlier open-source work. Please preserve the
+original notices when redistributing, describe your own changes clearly, cite
+the project you build upon, contribute generally useful fixes upstream where
+appropriate, and treat maintainers and contributors with respect. Healthy open
+source is shared stewardship: we maintain compatibility and the commons
+together.
+
+The adapted code and this project's changes are distributed under the MIT
+License with applicable attribution preserved in [LICENSE](LICENSE) and
+[NOTICE.md](NOTICE.md). Space Mono remains under the SIL Open Font License 1.1
+in `assets/fonts/OFL.txt`.
 
 OpenAI documentation for the original device is available at
 [Codex Micro](https://learn.chatgpt.com/docs/features/codex-micro), and the
