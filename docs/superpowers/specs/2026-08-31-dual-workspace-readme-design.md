@@ -1,6 +1,6 @@
 # Stopwatch AgentBezel C152 Dual-Workspace README Design
 
-**Status:** Approved for implementation
+**Status:** Implemented and locally verified
 
 **Date:** 2026-08-31
 
@@ -179,6 +179,26 @@ Implementation verification must prove:
 The native preview build is rerun to generate the SUPER asset. A firmware flash,
 installed Companion replacement, LaunchAgent restart, or macOS permission
 change is outside this documentation task.
+
+## Verification record — 2026-08-31
+
+Local verification passed for the dual-workspace README rewrite. The tracked
+`artifacts/super-workspace-preview.png` is the freshly generated 466 x 466
+connected SUPER preview from the deterministic `super` scenario. Both README
+workspace galleries are present, and their exact `##` section parity is 10
+headings in English and 10 in Simplified Chinese.
+
+Protected identifier assertions passed for `Codex Micro`, `Codex StopWatch
+Mic`, `CodexWatchCompanion`, `codex-watch-companion`, and
+`io.github.codex-micro-stopwatch.companion`; the approved design baseline has
+no runtime or configuration source changes under `src`, `include`,
+`companion`, `scripts`, `usb-mic`, or `platformio.ini`. Local asset, dimension,
+and README structure checks passed. The tracked-tree privacy scan found no
+credential pattern or personal `/Users/...` path; commit metadata is limited to
+GitHub noreply addresses; and `git diff --check` passed.
+
+This verification made no firmware flash, installed Companion change,
+LaunchAgent action, macOS permission change, or device configuration change.
 
 ## Rollback
 
