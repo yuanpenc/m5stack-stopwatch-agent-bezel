@@ -1,6 +1,6 @@
 # Stopwatch AgentBezel C152 Brand Migration Design
 
-**Status:** Approved for implementation
+**Status:** Implemented and verified
 
 **Date:** 2026-08-30
 
@@ -97,6 +97,21 @@ Before publication, verification must prove:
    environments still pass.
 6. The GitHub description and topics match this design and remote `main` equals
    the verified local HEAD.
+
+### Verification record — 2026-08-31
+
+The protected-identifier assertions passed, including the unchanged BLE, USB
+audio, Companion package/executable, bundle identifier, LaunchAgent, and
+runtime-source diff contracts. The native tests `completion_banner`,
+`connection_health`, `gesture`, `host_rpc_request`, `power_button_gesture`,
+`quota_payload`, `super_workspace_ui`, `workspace_input_policy`, and
+`workspace_mode` compiled and passed with `-Wall -Wextra -Werror`.
+
+The native preview build passed using the pinned local M5GFX dependency. Both
+USB-microphone environments (`prepare-bluedroid` and
+`m5stack-stopwatch-usb-mic`) built successfully. The tracked-file privacy scan
+and noreply commit-metadata check passed. No firmware was flashed and no
+installed Companion was changed.
 
 ## Rollback
 
