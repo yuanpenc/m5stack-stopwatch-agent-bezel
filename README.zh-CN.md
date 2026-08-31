@@ -78,24 +78,26 @@ ChatGPT Desktop 仅暴露一个 Mic key，而非单独的 `ACT10` 和 `ACT11`：
 
 向左滑动进入 super.engineering；当它已在前台时，向左滑动会返回准确的前一个
 前台应用。向上选择 Previous Project，向下选择 Next Project，向右选择 Next
-Tab。手表跟随前台应用，每 5 秒刷新一次 SUPER；没有有效租约时，会在 15 秒内
-回退到 Codex。前台应用变化不会强制唤醒屏幕。
+Tab。这些由 Companion 驱动的进入、返回、项目和标签控制不依赖 USB-mic 镜像。
+自动物理 SUPER 屏幕、其固件租约和设备侧输入隔离需要单独由用户选择、且相匹配的
+`usb-mic` 镜像。安装该镜像后，手表跟随前台应用，每 5 秒刷新一次 SUPER；没有
+有效租约时，会在 15 秒内回退到 Codex。前台应用变化不会强制唤醒屏幕。
 
-SUPER 激活时会隔离 Agent、Send、Voice Chat 和 ChatGPT 实体键动作，同时保留
-四个工作区滑动和电源控制。禁用输入不会发出 HID 动作或成功振动；进入时会释放
-任何按住的麦克风/语音控制。返回 Codex 后，现有控制全部恢复。Companion 仅在
-该准确应用位于前台时处理上、下、右，并向该进程定向发送固定按键，不发送全局
-输入。
+安装匹配的 `usb-mic` 镜像后，SUPER 激活时会隔离 Agent、Send、Voice Chat 和
+ChatGPT 实体键动作，同时保留四个工作区滑动和电源控制。禁用输入不会发出 HID
+动作或成功振动；进入时会释放任何按住的麦克风/语音控制。返回 Codex 后，现有
+控制全部恢复。Companion 仅在该准确应用位于前台时处理上、下、右，并向该进程
+定向发送固定按键，不发送全局输入。
 
 ### 验收清单
 
 - 向左进入分配的 super.engineering Space，并返回准确的前一个应用和 Space。
 - 向上和向下可见地选择上一个/下一个项目；向右按该应用自身的循环行为前进到
   Next Tab。
-- super.engineering 在前台时显示 SUPER；停止 Companion 或失去租约后，在 15 秒
-  内恢复 Codex。
-- SUPER 激活时不会发生 Agent、Send、Voice Chat 或 ChatGPT 实体键动作；返回后
-  Codex 控制和 ChatGPT 的上/下/右映射都恢复正常。
+- 使用单独选择且匹配的 `usb-mic` 镜像后，super.engineering 在前台时显示 SUPER；
+  停止 Companion 或失去租约后，在 15 秒内恢复 Codex。
+- 使用该匹配的 `usb-mic` 镜像后，SUPER 会阻止 Agent、Send、Voice Chat 和
+  ChatGPT 实体键动作；返回后 Codex 控制和 ChatGPT 的上/下/右映射都恢复正常。
 
 ## 推荐安装方式
 
@@ -162,12 +164,14 @@ app、路径、UUID 和日志均保留在本地。LaunchAgent 模板标识为
 默认 `m5stack-stopwatch` 镜像使用 Mac 麦克风。明确选择独立 `usb-mic` 构建的
 用户可将 StopWatch 暴露为 **Codex StopWatch Mic**：48 kHz、16-bit、mono、
 纯输入 USB Audio，不提供 USB speaker/output endpoint。BLE 控制和仪表盘仍然
-保留；只有 Mac 未传输麦克风音频时才播放本地完成提示音。
+保留；只有 Mac 未传输麦克风音频时才播放本地完成提示音。录音时保持 USB 连接，
+在 **系统设置 > 声音 > 输入** 中选择 **Codex StopWatch Mic**；Push to talk 和
+Voice Chat 动作继续走蓝牙，音频采样则通过 USB 传输。
 
 使用 `pio run -d usb-mic` 构建此独立目标；开始前应解释其首次构建的工具链下载、
 时间和磁盘成本。遵守同样的官方恢复和准确端口确认规则。完成后不应期待默认串口
-READY 标记：在 **系统设置 > 声音 > 输入** 中验证 **Codex StopWatch Mic**，
-另行验证 BLE/HID，并完成简短的本地录音测试。不要提交录音、设备标识或本地路径。
+READY 标记：验证已选择的 **Codex StopWatch Mic** 输入，另行验证 BLE/HID，并完成
+简短的本地录音测试。不要提交录音、设备标识或本地路径。
 
 ## 隐私与架构
 

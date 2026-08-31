@@ -92,16 +92,21 @@ credentials, or configuration content.
 Swipe left to enter super.engineering, or to return to the exact previously
 foreground application when super.engineering is already in front. Swipe up
 selects Previous Project, down selects Next Project, and right selects Next
-Tab. The watch follows the foreground app, refreshes SUPER every 5 seconds,
-and falls back to Codex within 15 seconds without a valid lease. The screen
-does not wake merely because the foreground app changes.
+Tab. These Companion-led entry, return, project, and tab controls are available
+without the USB-mic image. The automatic physical SUPER screen, its firmware
+lease, and device-side input isolation require the separately user-chosen,
+matching `usb-mic` image. With that image installed, the watch follows the
+foreground app, refreshes SUPER every 5 seconds, and falls back to Codex within
+15 seconds without a valid lease. The screen does not wake merely because the
+foreground app changes.
 
-SUPER isolates Agent, Send, Voice Chat, and ChatGPT physical-button actions
-while preserving the four workspace swipes and power controls. Disabled inputs
-emit neither HID actions nor success haptics; entering releases any held
-microphone/voice control. Returning to Codex restores all existing controls.
-The Companion context-gates up, down, and right to the exact foreground app,
-then sends fixed process-targeted keys rather than global input.
+With the matching `usb-mic` image installed, SUPER isolates Agent, Send, Voice
+Chat, and ChatGPT physical-button actions while preserving the four workspace
+swipes and power controls. Disabled inputs emit neither HID actions nor success
+haptics; entering releases any held microphone/voice control. Returning to
+Codex restores all existing controls. The Companion context-gates up, down, and
+right to the exact foreground app, then sends fixed process-targeted keys rather
+than global input.
 
 ### Acceptance checklist
 
@@ -109,11 +114,12 @@ then sends fixed process-targeted keys rather than global input.
   preceding app and Space.
 - Up and down visibly select Previous Project and Next Project; right advances
   Next Tab using the application's own wraparound behavior.
-- The SUPER screen appears while super.engineering is foreground; stopping the
-  Companion or losing its lease restores Codex within 15 seconds.
-- While SUPER is active, no Agent, Send, Voice Chat, or ChatGPT physical-button
-  action occurs; after return, Codex controls and ChatGPT's up/down/right
-  mappings work again.
+- With the separately chosen matching `usb-mic` image, the SUPER screen appears
+  while super.engineering is foreground; stopping the Companion or losing its
+  lease restores Codex within 15 seconds.
+- With that matching `usb-mic` image, SUPER blocks Agent, Send, Voice Chat, and
+  ChatGPT physical-button actions; after return, Codex controls and ChatGPT's
+  up/down/right mappings work again.
 
 ## Recommended installation
 
@@ -198,14 +204,16 @@ explicitly choose the isolated `usb-mic` build can expose the StopWatch as
 **Codex StopWatch Mic**: 48 kHz, 16-bit, mono, input-only USB Audio. It has no
 USB speaker/output endpoint. BLE controls and the dashboard remain included;
 the local completion chime plays only while the Mac is not streaming microphone
-audio.
+audio. Keep USB connected while recording, select **Codex StopWatch Mic** in
+**System Settings > Sound > Input**, and keep Push to talk and Voice Chat
+actions on Bluetooth while audio samples travel over USB.
 
 Build this separate target with `pio run -d usb-mic`; explain its first-build
 toolchain download, time, and disk cost before starting. Follow the same
 factory-recovery and exact-port confirmation rules. Afterward, do not expect
-the default serial READY marker: verify **Codex StopWatch Mic** under **System
-Settings > Sound > Input**, verify BLE/HID separately, and make a short local
-recording test. Do not commit recordings, device identifiers, or local paths.
+the default serial READY marker: verify the selected **Codex StopWatch Mic**
+input, verify BLE/HID separately, and make a short local recording test. Do
+not commit recordings, device identifiers, or local paths.
 
 ## Privacy and architecture
 
