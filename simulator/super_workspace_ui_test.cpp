@@ -2,10 +2,49 @@
 #include <cstring>
 #include <type_traits>
 #include <utility>
+#include <array>
+#include <string>
+#include <vector>
 
 #include "SuperWorkspaceUi.h"
 
 namespace {
+
+struct RecordingSurface {
+  std::vector<std::array<int, 5>> rectangles;
+  std::vector<int> triangleColors;
+  std::vector<std::string> texts;
+  void fillScreen(int) {}
+  void fillRect(int x, int y, int w, int h, int c) { rectangles.push_back({x,y,w,h,c}); }
+  void fillTriangle(int, int, int, int, int, int, int c) { triangleColors.push_back(c); }
+  void fillSmoothRoundRect(int, int, int, int, int, int) {}
+  void loadFont(const std::uint8_t*) {}
+  void unloadFont() {}
+  void setTextDatum(textdatum_t) {}
+  void setTextSize(float) {}
+  void setTextColor(int) {}
+  void drawString(const char* text, int, int) { texts.emplace_back(text); }
+};
+
+void testSharedRendererDoesNotCoverTriangleBases() {
+  super_workspace::State state;
+  state.profile = super_workspace::Profile::Hermes;
+  state.borderColors = {0xFFFF, 0xFFE0, 0x07FF, 0xF81F};
+  state.swipeDirection = touch_gesture::Direction::Right;
+  RecordingSurface surface;
+  super_workspace::render(surface, state);
+  assert(surface.rectangles.size() == 1);
+  const auto rect = surface.rectangles[0];
+  assert(rect[0] > 143 && rect[1] > 143);
+  assert(rect[0] + rect[2] <= 322 && rect[1] + rect[3] <= 322);
+  for (std::size_t i=0; i<4; ++i) assert(surface.triangleColors[i*2] == state.borderColors[i]);
+  auto contains = [&](const char* text) {
+    return std::find(surface.texts.begin(), surface.texts.end(), text) != surface.texts.end();
+  };
+  assert(contains("HERMES") && contains("NEW") && contains("CYCLE"));
+  assert(contains("OFFLINE") && contains("--%"));
+  assert(!contains("BACK") && !contains("TAB"));
+}
 
 template <typename T, typename = void>
 struct HasProjectName : std::false_type {};
@@ -87,7 +126,7 @@ void testDirectionalGeometryAndPalette() {
   assertPoint(controls[3].baseEnd, 143, 143);
   assertPoint(controls[3].tip, 26, 233);
   assertPoint(controls[3].labelAnchor, 90, 233);
-  assert(std::strcmp(controls[3].label, "BACK") == 0);
+  assert(std::strcmp(controls[3].label, "CYCLE") == 0);
   assert(controls[3].borderColor == 0x53DF);
 
   for (const auto& control : controls) {
@@ -139,6 +178,7 @@ void testNoUserContentOrCodexTelemetryFields() {
 }  // namespace
 
 int main() {
+  testSharedRendererDoesNotCoverTriangleBases();
   testDirectionalGeometryAndPalette();
   testDedicatedVisualState();
   testNoUserContentOrCodexTelemetryFields();

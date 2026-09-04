@@ -10,6 +10,7 @@
 
 #include "SpaceMonoVlw.h"
 #include "TouchGesture.h"
+#include "WorkspacePalette.h"
 
 namespace super_workspace {
 
@@ -88,13 +89,17 @@ static constexpr std::array<DirectionalControl, 4> kDirectionalControls = {{
      {316, 327}, {149, 327}, {233, 430}, {233, 387},
      0xEA7F, 0x1042, 0xF43F, 0x40C9},
     {touch_gesture::Direction::Left,
-     "BACK",
+     "CYCLE",
      {143, 322}, {143, 143}, {26, 233},
      {138, 316}, {138, 149}, {36, 233}, {90, 233},
      0x53DF, 0x0862, 0x8D1F, 0x1929},
 }};
 
+enum class Profile : std::uint8_t { Super, Hermes };
+
 struct State {
+  Profile profile = Profile::Super;
+  workspace_palette::Colors borderColors = workspace_palette::kInitialColors;
   std::int8_t batteryPercent = -1;
   bool charging = false;
   bool connected = false;
@@ -115,9 +120,8 @@ void drawText(Surface& surface, const char* text, int x, int y,
 template <typename Surface>
 void drawDirectionalControl(Surface& surface,
                             const DirectionalControl& control,
-                            bool active) {
-  const std::uint16_t borderColor =
-      active ? control.activeBorderColor : control.borderColor;
+                            bool active, std::uint16_t borderColor,
+                            const char* label) {
   const std::uint16_t fillColor =
       active ? control.activeFillColor : control.fillColor;
   surface.fillTriangle(control.baseStart.x, control.baseStart.y,
@@ -128,9 +132,9 @@ void drawDirectionalControl(Surface& surface,
                        control.innerTip.x, control.innerTip.y, fillColor);
 
   surface.loadFont(dashboard::font_data::kSpaceMono18Vlw);
-  drawText(surface, control.label, control.labelAnchor.x,
+  drawText(surface, label, control.labelAnchor.x,
            control.labelAnchor.y, middle_center,
-           active ? kText : control.borderColor);
+           control.borderColor);
   surface.unloadFont();
 }
 
@@ -178,20 +182,15 @@ void drawCenterBattery(Surface& surface, const State& state) {
 
 template <typename Surface>
 void drawCenterPanel(Surface& surface, const State& state) {
-  surface.fillRect(kCenterSquare.left, kCenterSquare.top,
-                   kCenterSquare.right - kCenterSquare.left + 1,
-                   kCenterSquare.bottom - kCenterSquare.top + 1,
-                   kCenterBorder);
-  surface.fillRect(kCenterSquare.left + kOutlineWidth,
-                   kCenterSquare.top + kOutlineWidth,
-                   kCenterSquare.right - kCenterSquare.left + 1 -
-                       2 * kOutlineWidth,
-                   kCenterSquare.bottom - kCenterSquare.top + 1 -
-                       2 * kOutlineWidth,
+  // Preserve all four triangle bases; no separate square outline.
+  surface.fillRect(kCenterSquare.left + 1, kCenterSquare.top + 1,
+                   kCenterSquare.right - kCenterSquare.left - 1,
+                   kCenterSquare.bottom - kCenterSquare.top - 1,
                    kCenterFill);
 
   surface.loadFont(dashboard::font_data::kSpaceMono46Vlw);
-  drawText(surface, kTitle, kCenterX, 190, middle_center, kText);
+  drawText(surface, state.profile == Profile::Hermes ? "HERMES" : kTitle,
+           kCenterX, 190, middle_center, kText);
   surface.unloadFont();
 
   surface.loadFont(dashboard::font_data::kSpaceMono18Vlw);
@@ -243,9 +242,14 @@ void drawPowerOverlay(Surface& surface, const State& state) {
 template <typename Surface>
 void render(Surface& surface, const State& state) {
   surface.fillScreen(kBackground);
-  for (const DirectionalControl& control : kDirectionalControls) {
+  for (std::size_t i = 0; i < kDirectionalControls.size(); ++i) {
+    const auto& control = kDirectionalControls[i];
+    const char* label = state.profile == Profile::Hermes &&
+                        control.direction == touch_gesture::Direction::Right
+                            ? "NEW" : control.label;
     drawDirectionalControl(surface, control,
-                           state.swipeDirection == control.direction);
+                           state.swipeDirection == control.direction,
+                           state.borderColors[i], label);
   }
   drawCenterPanel(surface, state);
   drawPowerOverlay(surface, state);

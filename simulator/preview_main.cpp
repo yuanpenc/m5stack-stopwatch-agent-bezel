@@ -60,21 +60,47 @@ super_workspace::State superPreviewState(const char* scenario) {
   state.batteryPercent = 78;
   state.connected = true;
 
-  if (std::strcmp(scenario, "super-active-right") == 0) {
+  const bool hermes = std::strncmp(scenario, "hermes", 6) == 0;
+  if (hermes) state.profile = super_workspace::Profile::Hermes;
+  const char* suffix = scenario + (hermes ? 6 : 5);
+  if (std::strcmp(suffix, "-active-right") == 0) {
     state.swipeDirection = touch_gesture::Direction::Right;
-  } else if (std::strcmp(scenario, "super-offline") == 0) {
+  } else if (std::strcmp(suffix, "-active-up") == 0) {
+    state.swipeDirection = touch_gesture::Direction::Up;
+  } else if (std::strcmp(suffix, "-active-down") == 0) {
+    state.swipeDirection = touch_gesture::Direction::Down;
+  } else if (std::strcmp(suffix, "-active-left") == 0) {
+    state.swipeDirection = touch_gesture::Direction::Left;
+  } else if (std::strcmp(suffix, "-offline") == 0) {
     state.connected = false;
     state.batteryPercent = 18;
-  } else if (std::strcmp(scenario, "super-charging") == 0) {
+  } else if (std::strcmp(suffix, "-charging") == 0) {
     state.charging = true;
-  } else if (std::strcmp(scenario, "super-power-hold") == 0) {
+  } else if (std::strcmp(suffix, "-power-hold") == 0) {
     state.powerOverlay = super_workspace::PowerOverlay::HoldToPowerOff;
     state.powerHoldProgress = 0.56f;
+  } else if (std::strcmp(suffix, "-unknown-battery") == 0) {
+    state.batteryPercent = -1;
+  } else if (std::strcmp(suffix, "-colors") == 0) {
+    workspace_palette::Palette palette;
+    unsigned seed = 7;
+    palette.acceptSwipe(0, [&] { seed = seed * 1664525u + 1013904223u; return seed; });
+    state.borderColors = palette.colors();
   }
   return state;
 }
 
 bool validScenario(const char* scenario) {
+  const bool hermes = std::strncmp(scenario, "hermes", 6) == 0;
+  const bool super = std::strncmp(scenario, "super", 5) == 0;
+  if (hermes || super) {
+    const char* suffix = scenario + (hermes ? 6 : 5);
+    for (const auto* known : {"", "-active-up", "-active-right", "-active-down",
+                              "-active-left", "-offline", "-charging",
+                              "-power-hold", "-unknown-battery", "-colors"})
+      if (std::strcmp(suffix, known) == 0) return true;
+    return false;
+  }
   return std::strcmp(scenario, "live") == 0 ||
          std::strcmp(scenario, "ble") == 0 ||
          std::strcmp(scenario, "live-stale") == 0 ||
@@ -122,7 +148,8 @@ int main(int argc, char** argv) {
     return 1;
   }
   framebuffer.setTextWrap(false);
-  if (std::strncmp(scenario, "super", 5) == 0) {
+  if (std::strncmp(scenario, "super", 5) == 0 ||
+      std::strncmp(scenario, "hermes", 6) == 0) {
     super_workspace::render(framebuffer, superPreviewState(scenario));
   } else {
     dashboard::render(framebuffer, previewState(scenario));
