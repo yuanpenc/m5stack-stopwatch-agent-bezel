@@ -47,8 +47,7 @@ HID channel.
 ## Foreground workspace mode over HID
 
 The optional USB-microphone firmware accepts one project-owned control RPC over
-vendor Report ID 6. This channel changes only the rendered workspace mode; it
-does not carry quota data or application content.
+vendor Report ID 6. It changes only a fixed rendered mode, not quota or content.
 
 The macOS report passed to `IOHIDDeviceSetReport` is always 64 bytes:
 
@@ -59,48 +58,56 @@ The macOS report passed to `IOHIDDeviceSetReport` is always 64 bytes:
 | 2 | UTF-8 payload length, 0 through 61 |
 | 3 through 63 | Payload bytes followed by zero padding |
 
-Requests are newline-terminated UTF-8 JSON. Payloads longer than 61 bytes are
-split on byte boundaries into consecutive reports. HOGP normally strips the
-report ID before delivering the 63-byte report body; the firmware accepts both
-the stripped body and the full 64-byte form.
-
-The only valid requests are:
+Requests are newline-terminated UTF-8 JSON, fragmented at byte boundaries into
+at most 61 payload bytes per report. HOGP normally strips the report ID; firmware
+accepts both the 63-byte body and full 64-byte form. A failed fragment stops that
+request; the writer does not continue its remaining fragments.
 
 ```json
 {"method":"host.workspace_mode","params":{"mode":"super","ttl_ms":15000},"id":1}
-{"method":"host.workspace_mode","params":{"mode":"codex"},"id":2}
+{"method":"host.workspace_mode","params":{"mode":"hermes","ttl_ms":15000},"id":2}
+{"method":"host.workspace_mode","params":{"mode":"codex"},"id":3}
 ```
 
-`super` requires exactly `ttl_ms: 15000`. `codex` permits only the `mode`
-field. Missing fields, extra fields, wrong types, negative/floating/overflowing
-TTL values, and any other TTL are rejected as `-32602 Invalid params` without
-changing or renewing the lease.
+These are the only mode/parameter shapes. SUPER/HERMES require exactly integer
+`ttl_ms: 15000`; Codex permits only `mode`. Missing or extra fields, wrong types,
+negative, floating, overflowing or different TTL values yield
+`-32602 Invalid params` without changing or renewing the lease.
 
-The first valid `super` request owns the lease for its HID connection. The same
-connection may renew it; another connection cannot take over or refresh it.
-Any valid `codex` request exits safely, the owner's disconnect exits
-immediately, and otherwise the firmware exits after 15 seconds using
-wrap-safe `millis()` arithmetic. Renewals do not redraw an unchanged screen.
-This method is classified as control-only: it never marks the Codex host RPC as
-observed and cannot synthesize the `CODEX LIVE` state.
+The first valid directional request owns a shared lease for its HID connection.
+That owner can renew or switch SUPER↔HERMES. Another connection cannot take over,
+switch or refresh it. Any valid Codex request exits safely; owner disconnect
+exits immediately; otherwise wrap-safe `millis()` expiry restores Codex after
+15 seconds. Renewal does not dirty an unchanged mode. This method remains
+`ControlOnly`, never sets host-RPC-observed and cannot synthesize `CODEX LIVE`.
 
-The companion watches the exact foreground bundle identifier
-`com.zarifpour.superconductor`. It sends `super` immediately on entry and every
-5 seconds thereafter, sends `codex` once on exit or orderly shutdown, and
-immediately synchronizes each newly attached device. Output failures are
-retried by later heartbeats and logged at most once per 60 seconds; they do not
-stop HID input, quota refresh, or the main RunLoop. Foreground observation,
-timers, and HID output exist only in a real `--watch` run.
+Only real companion `--watch` mode observes exact foreground bundle IDs:
+`com.zarifpour.superconductor` → SUPER, `com.nousresearch.hermes` → HERMES,
+everything else → Codex. Activation requests alone do not select the screen.
+Entry/attach synchronizes immediately; one 5-second timer renews the current
+directional mode. Leaving sends Codex and stops renewals. Failed exit writes
+retry only failed devices, at most twice at 5-second intervals; success, detach,
+a new mode or stop cancels obsolete retries. Stop attempts Codex before listener
+shutdown. Lifecycle generations reject delayed callbacks after stop/restart.
+Failures log at most once per 60 seconds and do not stop HID input, quota or the
+main RunLoop. All observer, timer and writer operations are MainActor-serialized.
 
-While the display sleeps, mode changes update state without waking it. In
-`SUPER` mode, firmware accepts only four radial swipes and the existing power /
-Travel Mode behavior; Agent, Send, microphone/voice controls, and ChatGPT
-physical buttons are isolated until the Codex dashboard returns.
+Mode changes never wake a sleeping display. SUPER/HERMES isolate Agent, Send,
+voice controls and ChatGPT physical buttons, retaining four swipes and existing
+power/Travel Mode behavior. Disabled short taps do not wake; a swipe that wakes
+the display is consumed without sending navigation.
 
-This RPC sends only a fixed mode enum, fixed TTL, and request number. It never
-contains project names, session titles, windows, Spaces, workspace data,
-credentials, prompts, conversation content, or arbitrary display text. The
-companion does not log report payloads or device identifiers for this channel.
+Palette changes are firmware-local: an accepted awake four-direction swipe selects
+four distinct colors from a fixed 12-color pool, with an 800ms visual cooldown.
+Every direction differs from its preceding color. Rendering, foreground changes
+and heartbeats do not randomize. No palette/color RPC or arbitrary text input is
+introduced. Codex swipes may update the hidden palette without changing the
+Codex dashboard; entering a directional screen reuses that palette.
+
+The channel contains only a fixed mode enum, fixed TTL and a wrapping UInt32
+request number. It never contains project/session/window/Space/workspace data,
+credentials, prompts or user content. No report payloads or device identifiers
+are logged.
 
 ## Optional maintenance request
 

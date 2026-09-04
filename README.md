@@ -3,48 +3,46 @@
 [简体中文](README.zh-CN.md)
 
 **Stopwatch AgentBezel C152** is an independent, unofficial, open-source
-dual-workspace control surface for the **M5Stack StopWatch Dev Kit C152**.
-It gives one physical device a Codex Micro-compatible workspace and an optional
-dedicated super.engineering workspace, plus a local quota dashboard and an
-optional USB microphone.
+three-workspace control surface for the **M5Stack StopWatch Dev Kit C152**:
+Codex Micro compatibility, super.engineering project controls, and Hermes
+Desktop session controls, with a local quota dashboard and optional USB microphone.
 
-Codex Micro compatibility is experimental and undocumented. Compatibility-
-facing runtime names intentionally remain unchanged so existing Bluetooth
-pairing, audio selection, macOS permissions, and automatic startup keep working.
+Codex Micro compatibility is experimental and undocumented. Runtime names,
+pairing identities, audio selection and the local Companion identity remain
+unchanged. New three-app behavior requires matching source builds; physical
+acceptance of this revision is pending.
 
-## Two workspaces
+## Three workspaces
 
 <table>
+  <tr><th>Codex Micro</th><th>super.engineering</th><th>Hermes Desktop</th></tr>
   <tr>
-    <th>Codex Micro workspace</th>
-    <th>super.engineering workspace <em>(optional)</em></th>
-  </tr>
-  <tr>
-    <td width="50%"><img src="artifacts/dashboard-preview-v2-round.png" alt="Codex Micro workspace showing six controls, connection status, quota, reset time, and battery"></td>
-    <td width="50%"><img src="artifacts/super-workspace-preview.png" alt="super.engineering workspace showing SUPER status, connection, battery, and four directional controls"></td>
+    <td width="33%"><img src="artifacts/dashboard-preview-v2-round.png" alt="Codex Micro dashboard with six controls, quota and battery"></td>
+    <td width="33%"><img src="artifacts/super-workspace-preview.png" alt="SUPER with four colored triangles and no separate center border"></td>
+    <td width="33%"><img src="artifacts/hermes-workspace-preview.png" alt="HERMES with CYCLE, PREV, NEXT and NEW controls"></td>
   </tr>
 </table>
 
-Codex Micro is the default ChatGPT/Codex surface for Agent status, quota,
-voice, Send, and configurable directions. super.engineering is an optional,
-foreground-aware integration for entering or leaving that app, moving between
-projects, and advancing session tabs. Without it, the complete Codex Micro
-experience remains available.
+These are native framebuffer design previews, not hardware photographs.
 
-| StopWatch input | Codex Micro workspace | super.engineering workspace |
-| --- | --- | --- |
-| Hold left physical button | Push to talk | No action¹ |
-| Press right physical button | Toggle Voice Chat | No action¹ |
-| Tap center | Send | No action¹ |
-| Swipe left | User-configurable direction | Enter or leave super.engineering |
-| Swipe up | User-configurable direction | Previous project |
-| Swipe down | User-configurable direction | Next project |
-| Swipe right | User-configurable direction | Next session tab |
-| Power controls | Desk sleep and Travel Mode | Same power behavior |
+**Swipe left to cycle: Codex / ChatGPT → SUPER → HERMES → Codex / ChatGPT.**
+The current Codex / ChatGPT entry uses `com.openai.codex`; it is one target,
+not two. From an unrelated foreground app, left first enters Codex.
+Missing or rejected targets are not skipped. The former “return to previous
+app” behavior is replaced by this fixed cycle.
 
-¹ Device-side input isolation requires the matching `usb-mic` firmware. With
-the default firmware, these physical-button and center-Send controls retain
-their Codex Micro behavior.
+| Input | Codex Micro | SUPER | HERMES |
+| --- | --- | --- | --- |
+| Left physical / right physical / center tap | Push to talk / Voice Chat / Send | No action¹ | No action¹ |
+| Swipe left | Enter SUPER | Enter HERMES | Enter Codex |
+| Swipe up | Existing app mapping | Previous project | Previous session Tab |
+| Swipe down | Existing app mapping | Next project | Next session Tab |
+| Swipe right | Existing app mapping | Next session Tab | New session Tab |
+| Power controls | Desk sleep / Travel Mode | Same | Same |
+
+¹ Directional screens and device-side isolation require the explicitly chosen
+matching `usb-mic` firmware. The default wireless image remains a Codex panel.
+Companion direction handling requires a real `--watch` process.
 
 ## Codex Micro workspace
 
@@ -52,8 +50,8 @@ The default dashboard shows Agent state, weekly Codex allowance, reset
 countdown, battery and charging/Dock state, and whether Codex, BLE, and quota
 sync are healthy. A completed Agent turns green and plays a soft completion
 chime. The left physical button is Push to talk, the right button is Voice
-Chat, the center dial is Send, and all four swipe directions remain
-user-configurable in ChatGPT Desktop. Physical buttons and touch gestures use
+Chat, the center dial is Send, and up/down/right remain configurable in ChatGPT Desktop; left is reserved for
+workspace cycling while the Companion runs in real watch mode. Physical buttons and touch gestures use
 haptics.
 
 The compatible `Codex Micro` BLE HID channel carries controls. The local quota
@@ -71,59 +69,65 @@ a deliberately slower Travel Mode fallback with a missed-alert warning. Physical
 power switching soak testing is still pending, so timings and wake behavior are
 experimental until that checklist is complete.
 
-## Optional super.engineering workspace
+## super.engineering workspace
 
-This integration is optional and identifies super.engineering only by the exact
-bundle identifier `com.zarifpour.superconductor`. It sends only fixed workspace
-mode and targeted shortcut events; it never reads or transmits project names,
-session names, windows, Spaces, workspace state, prompts, conversations,
-credentials, or configuration content.
+Use the exact bundle `com.zarifpour.superconductor`. Configure these app
+shortcuts: Previous Project = `Control-Option-Up`, Next Project =
+`Control-Option-Down`, Next Tab = `Control-Option-Right`.
+Up/down/right are sent only to that exact foreground process. Left advances to
+Hermes; it does not return to an arbitrary previous app.
 
-### Setup
+## Hermes Desktop workspace
 
-1. Assign super.engineering to a dedicated normal macOS Space. Create the
-   Space, move the app there, then choose **Dock → Options → Assign To → This
-   Desktop**. The Companion neither creates nor enumerates Spaces.
-2. In super.engineering **Keyboard Shortcuts**, configure **Previous Project**
-   = `Control-Option-Up`, **Next Project** = `Control-Option-Down`, and **Next
-   Tab** = `Control-Option-Right`.
-3. Enable both Input Monitoring and Accessibility for the installed
-   `CodexWatchCompanion.app`. Accessibility is required for project and tab
-   navigation; the Companion does not change macOS permissions itself.
-4. Leave only ChatGPT's Analog stick left direction unbound; retain its
-   original up, down, and right mappings.
+Use the exact native app bundle `com.nousresearch.hermes`, not a CLI, web
+dashboard or installer. Up sends `Control-Shift-Tab`, down sends
+`Control-Tab`, and right sends `Command-T` for a new session Tab, following
+the [official Desktop shortcuts](https://hermes-agent.nousresearch.com/docs/user-guide/desktop#windows-tabs--panes).
+Verify these with a physical keyboard if you have rebound them. The Companion
+does not read or change Hermes settings and never retries a new-Tab command.
 
-Swipe left to enter super.engineering, or to return to the exact previously
-foreground application when super.engineering is already in front. Swipe up
-selects Previous Project, down selects Next Project, and right selects Next
-Tab. These Companion-led entry, return, project, and tab controls are available
-without the USB-mic image. The automatic physical SUPER screen, its firmware
-lease, and device-side input isolation require the separately user-chosen,
-matching `usb-mic` image. With that image installed, the watch follows the
-foreground app, refreshes SUPER every 5 seconds, and falls back to Codex within
-15 seconds without a valid lease. The screen does not wake merely because the
-foreground app changes.
+## Shared workspace setup and screen behavior
 
-With the matching `usb-mic` image installed, SUPER isolates Agent, Send, Voice
-Chat, and ChatGPT physical-button actions while preserving the four workspace
-swipes and power controls. Disabled inputs emit neither HID actions nor success
-haptics; entering releases any held microphone/voice control. Returning to
-Codex restores all existing controls. The Companion context-gates up, down, and
-right to the exact foreground app, then sends fixed process-targeted keys rather
-than global input.
+1. Install the three target desktop apps. Assign each to a normal macOS Space
+   manually using **Dock → Options → Assign To → This Desktop** if desired.
+   The Companion activates apps; it does not create/enumerate Spaces or select
+   a particular window.
+2. Enable Input Monitoring and Accessibility for the installed
+   `CodexWatchCompanion.app`; retain Bluetooth permission for quota sync.
+3. Leave **Analog stick left** unbound in ChatGPT's controller settings.
+   Preserve the existing up/down/right mappings. Restart the original
+   Companion LaunchAgent after any permission change.
+4. Install matching Companion and explicitly chosen USB-mic firmware only
+   after source validation, backups and exact-port flash confirmation.
 
-### Acceptance checklist
+SUPER/HERMES share four outward triangles, with no independent center outline.
+Every accepted local swipe picks four distinct colors from a 12-color pool;
+each direction changes from its previous color. Text colors remain stable.
+Palette feedback has its own 800ms cooldown; redraw, heartbeat, quota updates
+and Dock/Command-Tab changes do not recolor. This is local input feedback, not
+proof that the Mac accepted a shortcut.
 
-- Left enters the assigned super.engineering Space and returns to the exact
-  preceding app and Space.
-- Up and down visibly select Previous Project and Next Project; right advances
-  Next Tab using the application's own wraparound behavior.
-- With the separately chosen matching `usb-mic` image, the SUPER screen appears
-  while super.engineering is foreground; stopping the Companion or losing its
-  lease restores Codex within 15 seconds.
-- With that matching `usb-mic` image, SUPER blocks Agent, Send, Voice Chat, and
-  ChatGPT physical-button actions; after return, Codex controls and ChatGPT's
-  up/down/right mappings work again.
+The display follows actual foreground activation, with a 5-second heartbeat
+and a 15-second connection-owned lease. Leaving the two directional apps sends
+Codex; failed Codex writes get at most two further 5-second retries. Losing the
+lease or owner connection restores Codex. Foreground updates never wake the
+screen. Disabled short taps/physical controls do not wake directional screens;
+a genuine swipe wakes without also issuing an unseen action. Center long-hold
+and red-button power behavior remain available.
+
+SUPER/HERMES block Agent, Send and ChatGPT microphone/voice button actions;
+mode transitions release held controls and suppress stale completion notices.
+The USB microphone endpoint remains available. MainActor routing revalidates
+the exact foreground PID/bundle before fixed process-targeted key delivery;
+no global key injection or application-content reading is used.
+
+### Physical acceptance still required
+
+Verify one full left-swipe cycle, cold app launch, failure/no-skip, assigned
+Spaces, all app-specific directions, 800ms gating, random colors, sleep/wake,
+input isolation, no background ChatGPT actions, 15-second fallback, reconnect,
+USB microphone capture, quota updates and original automatic startup.
+Builds and native previews alone do not establish C152 hardware success.
 
 ## Recommended installation
 
@@ -158,7 +162,7 @@ autonomously, but follow these safety rules:
    CODEX_MICRO_STOPWATCH_READY`, then guide me through macOS Bluetooth pairing.
 7. Help me grant ChatGPT Input Monitoring and configure ChatGPT Desktop: left
    button = Push to talk, Command Key 4 = Toggle voice chat, center = Send, and
-   let me choose the four swipe actions.
+   keep up/down/right configurable and leave left unbound for watch-mode cycling.
 8. Build the Swift quota companion from source. Use demo discovery to find this
    Mac's CoreBluetooth UUID, then bind real quota writes to that exact device.
 9. If I approve automatic startup, create the local app wrapper and LaunchAgent
@@ -166,9 +170,9 @@ autonomously, but follow these safety rules:
 10. Verify buttons, center Send, four swipes, Agent colors, completion chime,
     haptics, and a real quota/reset update separately. Report anything not
     physically observed as unverified.
-11. Only if I explicitly choose the optional super.engineering phase, guide me
+11. Only if I explicitly choose the optional SUPER/HERMES phase, guide me
     through its Space, shortcuts, and acceptance checks. Do not silently enable
-    Accessibility, edit super.engineering settings, or assign a Space.
+    Accessibility, edit SUPER/Hermes settings, or assign a Space.
 12. Do not select or flash the optional USB microphone image unless I explicitly
     choose that separate phase.
 ```
@@ -185,7 +189,7 @@ allows **ChatGPT** in **System Settings > Privacy & Security > Input
 Monitoring** before quitting and reopening ChatGPT. Configure the actions in
 **ChatGPT Desktop > Settings > Codex Micro**. The base installation needs
 Bluetooth access for the locally built companion; the optional
-super.engineering phase additionally needs Input Monitoring and Accessibility
+SUPER/HERMES phase additionally needs Input Monitoring and Accessibility
 for `CodexWatchCompanion.app`.
 
 Build the quota companion from source, run demo discovery, and bind real writes
@@ -228,11 +232,11 @@ GATT service to the explicitly bound watch. The compatible HID interface does
 not include account rate limits.
 
 In a real `--watch` run, the optional workspace integration additionally sends
-only the fixed `codex` or `super` display-mode enum over vendor HID Report ID
+only the fixed `codex`, `super` or `hermes` display-mode enum over vendor HID Report ID
 6. It does not send API keys, tokens, account identifiers, prompts, task text,
 audio, project/session/window/Space metadata, or user content. It does not
 scrape UI, use a cloud relay, inspect keyboard text, invoke shell commands or
-AppleScript, use private Space APIs, or inspect super.engineering settings.
+AppleScript, use private Space APIs, or inspect super.engineering or Hermes settings.
 
 Device MAC addresses, CoreBluetooth UUIDs, usernames, home-directory paths,
 and logs are local installation data and must never be committed. BLE pairing
@@ -333,11 +337,12 @@ button sends `ACT09`, not `ACT11`.
 
 ### Optional workspace navigation does not work
 
-- Confirm the foreground bundle is `com.zarifpour.superconductor`, the three
+- Confirm the foreground bundle is `com.zarifpour.superconductor` or
+  `com.nousresearch.hermes`, the corresponding
   fixed shortcuts work from the physical keyboard, and Accessibility is enabled
   for `CodexWatchCompanion.app`.
 - Input Monitoring is required to receive radial gestures. If Accessibility is
-  missing, only project/tab navigation is disabled; left entry/return, quota,
+  missing, only project/tab navigation is disabled; left cycling, quota,
   and USB microphone input remain available.
 
 ## Acknowledgements, license, and trademarks
@@ -352,9 +357,9 @@ This repository belongs to an open-source implementation lineage:
    adapts portions of that BLE layer for the M5Stack StopWatch C152, then adds
    the StopWatch UI, power behavior, quota companion, and optional USB
    microphone. It is the direct codebase on which this repository builds.
-3. **Stopwatch AgentBezel C152** continues the StopWatch codebase with the dual
-   Codex Micro and optional super.engineering workspaces, including the
-   Companion integration and dedicated SUPER display.
+3. **Stopwatch AgentBezel C152** continues the StopWatch codebase with Codex Micro,
+   super.engineering and Hermes Desktop workspaces, including foreground
+   Companion integration and dedicated directional displays.
 
 This is an implementation lineage, not a claim that the repositories are
 runtime package dependencies or officially affiliated projects. Each later

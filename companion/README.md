@@ -51,107 +51,105 @@ otherwise the dashboard will correctly mark quota sync stale.
 Pass `--codex-path /absolute/path/to/codex` when automatic executable discovery
 does not select the intended local Codex installation.
 
-## Optional super.engineering dedicated workspace controls and screen
+## Optional three-workspace controls and screens
 
-A real `--watch` process also listens for the four radial reports from the C152
-StopWatch:
+Only a real `--watch` process enables foreground observation, radial HID input
+and workspace HID output. One-shot, `--demo`, `--json-only` and bootloader
+modes do not create these controllers.
 
-| Gesture | Behavior |
-| --- | --- |
-| Left | Activate or launch super.engineering; when it is already in front, return to the exact previously foreground application |
-| Up | Select Previous Project while super.engineering is in front |
-| Down | Select Next Project while super.engineering is in front |
-| Right | Select Next Tab while super.engineering is in front |
+| Foreground app | Left | Up | Down | Right |
+| --- | --- | --- | --- | --- |
+| Codex / ChatGPT (`com.openai.codex`) | SUPER | Existing ChatGPT binding | Existing ChatGPT binding | Existing ChatGPT binding |
+| SUPER (`com.zarifpour.superconductor`) | HERMES | Previous Project | Next Project | Next Tab |
+| HERMES (`com.nousresearch.hermes`) | Codex | Previous Tab | Next Tab | New Tab |
 
-With the matching USB-mic firmware installed, the same real `--watch` process
-also follows the foreground application on the StopWatch display. When
-super.engineering is in front, the watch shows a fixed `SUPER` screen with the
-four actions above. The companion sends `super` immediately and renews it every
-5 seconds; the firmware lease lasts 15 seconds. Leaving super.engineering sends
-`codex` once and cancels the renewal timer. A device attached or reattached to
-the running companion is synchronized immediately. If the companion stops, a
-write fails continuously, or the owning HID connection disappears, the watch
-returns to the Codex dashboard no later than lease expiry.
+From any other foreground app, left activates Codex first. This is a fixed
+cycle, not a remembered-return toggle. The companion activates a running app
+or launches the exact bundle ID. A pending activation suppresses additional
+left requests until foreground confirmation, failure, an external app switch,
+or a 3-second timeout. It never skips a missing app or optimistically switches
+the watch screen before the real foreground changes.
 
-Changing the foreground application while the display is asleep does not wake
-it. The firmware records the new mode and renders the correct screen the next
-time the user wakes the display. In `SUPER` mode, only the four radial swipes,
-the red power button, and the existing long-hold Travel Mode path are active.
-Agent touch, center Send, and the left/right ChatGPT physical buttons emit no
-HID action or success haptic. Any held microphone/voice control is released on
-entry. Returning to the Codex dashboard restores the existing controls. The
-USB microphone endpoint itself remains available to macOS throughout.
+Prepare the applications and permissions:
 
-The target is identified only by bundle identifier
-`com.zarifpour.superconductor`. If the remembered return application has
-exited, the companion leaves super.engineering in front instead of guessing a
-replacement. Repeated launch gestures are ignored while launch is in progress,
-and radial presses use a release gate plus an 800-millisecond cooldown.
+1. Optionally place each app in its own normal macOS Space and use its Dock
+   menu, **Options → Assign To → This Desktop**. The companion does not create,
+   enumerate or control Spaces with private APIs.
+2. Configure SUPER **Previous Project**, **Next Project**, **Next Tab** as
+   `Control-Option-Up`, `Control-Option-Down`, `Control-Option-Right`.
+3. Keep Hermes Desktop's default `Control-Shift-Tab`, `Control-Tab`,
+   `Command-T` bindings for previous, next and new session Tab.
+4. Leave only ChatGPT **Analog stick left** unassigned; retain up/down/right.
+5. Enable the installed `CodexWatchCompanion.app` under **System Settings →
+   Privacy & Security → Input Monitoring** and **Accessibility**. Restart the
+   existing LaunchAgent after permissions change; do not start a second watch
+   process.
 
-Prepare the dedicated workspace before using these controls:
+Missing Input Monitoring warns once without stopping quota sync. Missing
+Accessibility warns once and disables only SUPER/HERMES navigation; left
+activation, display synchronization, quota and USB microphone remain separate.
+Up/down/right are companion no-ops in Codex and all other applications.
+Navigation uses fixed process-targeted CoreGraphics down/up pairs, revalidating
+the foreground identity and PID/bundle pair before delivery. It never posts
+these keys globally or retries navigation commands. Physical acceptance must
+still confirm ChatGPT performs no background action in SUPER/HERMES.
 
-1. Create a normal macOS Space, move super.engineering there, then use the
-   application's Dock menu and choose **Options → Assign To → This Desktop**.
-   The companion does not create or enumerate Spaces. Without this assignment,
-   left still activates and returns, but macOS provides no dedicated-desktop
-   guarantee.
-2. In super.engineering's **Keyboard Shortcuts** settings, configure **Previous
-   Project** as `Control-Option-Up`, **Next Project** as
-   `Control-Option-Down`, and **Next Tab** as `Control-Option-Right`.
-3. In ChatGPT's StopWatch controller settings, leave only **Analog stick left**
-   unassigned. Keep the existing up, down, and right bindings.
-4. Add the locally installed `CodexWatchCompanion.app` under **System Settings →
-   Privacy & Security → Input Monitoring** and **Accessibility**, and enable it
-   in both places.
-5. Restart the existing companion LaunchAgent after changing permissions.
+With matching USB-mic firmware, the watch follows the real foreground:
+SUPER and HERMES receive an immediate mode write and a heartbeat every
+5 seconds. All other foreground apps select Codex. Each directional lease is
+15 seconds and each newly attached device is synchronized immediately. A
+failed Codex exit write is retried at most twice, 5 seconds apart, only for
+failed devices. A new mode, detach or stop cancels obsolete retries. Failures
+are logged at most once per 60 seconds, without payload or device identifiers.
+Orderly shutdown attempts Codex before stopping the listener. Owner disconnect
+or lease expiry also restores Codex.
 
-Up, down, and right are companion no-ops unless super.engineering is the exact
-foreground application, so ChatGPT retains its mappings after the user returns
-to it. Physical acceptance must also confirm that ChatGPT performs no visible
-background action while super.engineering is in front; the companion does not
-rewrite ChatGPT preferences if that compatibility check fails.
+Both directional screens share four outward triangles, without an independent
+center square border. The title, connection and battery stay in the center.
+Each accepted local four-direction swipe chooses four distinct colors from a
+12-color pool; every direction changes from its previous color. Text colors
+stay fixed, redraws and heartbeats do not reshuffle colors, and the 800ms local
+visual cooldown does not replace the host decoder's release gate/cooldown.
 
-If Input Monitoring is missing, the companion warns once and keeps quota sync
-running, but cannot receive any StopWatch radial gesture. If Accessibility is
-missing, it warns once and disables only project/tab navigation; left-swipe
-activation and return, quota sync, and USB microphone input remain available.
-The HID listener starts only in a real `--watch` run, not in one-shot, `--demo`,
-`--json-only`, or `--enter-bootloader` modes. It matches only the exact C152
-descriptor and report used by this project.
+Foreground changes while asleep do not wake the display. Disabled short taps,
+Agent/Send and the left/right ChatGPT physical buttons do not wake or send HID
+actions in SUPER/HERMES. A swipe used to wake the sleeping screen is consumed
+as a wake gesture, not sent to the app. Four swipes, the red power button and
+the existing long-hold Travel Mode remain available. Held microphone/voice
+controls are released on entry and stale Agent transitions are silently
+baselined. Returning to Codex restores existing controls. The USB microphone
+endpoint is unchanged.
 
-Navigation uses fixed, process-targeted CoreGraphics key-down/key-up pairs. It
-revalidates both the foreground identity and the PID/bundle pair before every
-delivery. It never posts those keys globally and does not inspect menus,
-Accessibility labels, screen coordinates, project names, session titles,
-application preferences, conversation content, keyboard text, or credentials.
-The display channel sends only the fixed `codex` or `super` mode enum, a fixed
-15-second TTL, and a local request number. It does not send project, session,
-window, Space, workspace, or user-content metadata. It does not run `sc`, shell
-commands, AppleScript, UI scraping, or private Space APIs.
+The workspace channel sends only fixed `codex`, `super` or `hermes`, a fixed
+TTL for directional modes and a local request number. It does not inspect or
+transmit projects, sessions, windows, Spaces, app preferences, credentials or
+user content. Workspace control does not run CLI, shell, AppleScript, UI
+scraping or private Space APIs; the existing Codex App Server quota subprocess
+is unchanged.
 
-For a companion-only rollback, stop the existing LaunchAgent, restore the
-previously backed-up signed companion app, verify its signature, and restart
-that same LaunchAgent. The upgraded firmware falls back to the Codex dashboard
-within 15 seconds when the old companion sends no renewal. For a complete
-two-component rollback, additionally restore the saved pre-change USB-mic
-firmware, but only after rediscovering the current `/dev/cu.*` bootloader port
-and obtaining explicit confirmation for that exact port. Never reuse a port
-from an earlier flash. Optionally set the Dock assignment back to **None** and
-reset the three super.engineering shortcuts.
+For rollback, stop the original LaunchAgent, restore the backed-up signed
+Companion app, verify its signature and restart that same agent, preserving its
+configuration. Without renewals the new firmware returns to Codex within
+15 seconds. Older companions may still select SUPER, but do not support the
+new cycle/Hermes behavior. Full rollback additionally restores the saved
+USB-mic firmware, only after freshly enumerating the download port and obtaining
+explicit confirmation for that exact port. Never reuse a historical port.
+Space assignments and app shortcuts can be restored manually.
 
-Useful diagnostics:
+Diagnostics (direct workspace probes briefly change the physical screen):
 
 ```sh
-# Verify App Server parsing without using Bluetooth.
 .build/release/codex-watch-companion --json-only
-
-# Verify BLE discovery and writes using a synthetic snapshot.
-.build/release/codex-watch-companion --demo --verbose
-
-# Direct firmware diagnostic. SUPER automatically expires after 15 seconds.
+swift ../scripts/hid_rpc_probe.swift --self-test
 swift ../scripts/hid_rpc_probe.swift --workspace-super
+swift ../scripts/hid_rpc_probe.swift --workspace-hermes
 swift ../scripts/hid_rpc_probe.swift --workspace-codex
 ```
+
+The current three-workspace implementation has automated build/harness
+verification; installation, gesture compatibility, Space switching, sleep,
+lease timeout, reconnect and USB microphone regression still require physical
+acceptance. Build results alone do not establish those outcomes.
 
 ## Optional USB-mic bootloader request
 

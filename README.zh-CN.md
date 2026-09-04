@@ -3,50 +3,48 @@
 [English](README.md)
 
 **Stopwatch AgentBezel C152** 是面向 **M5Stack StopWatch Dev Kit C152**
-的独立、非官方开源双工作区控制界面。一台设备同时提供 Codex Micro 兼容
-工作区和可选的 super.engineering 专属工作区，并支持本地额度面板和可选
-USB 麦克风。
+的独立、非官方开源三工作区控制界面：Codex Micro 兼容面板、super.engineering
+项目控制、Hermes Desktop 会话控制，并提供本地额度面板和可选 USB 麦克风。
 
-Codex Micro 兼容性为实验性且未文档化功能。为保持现有蓝牙配对、音频设备
-选择、macOS 权限和自动启动继续有效，兼容性运行时名称有意保持不变。
+Codex Micro 兼容性为实验性且未文档化功能。运行标识、配对身份、音频名称与
+Companion 身份保持不变。新版三应用行为需要匹配的源码构建；本修订的实机验收尚未完成。
 
-## 双工作区
+## 三工作区
 
 <table>
+  <tr><th>Codex Micro</th><th>super.engineering</th><th>Hermes Desktop</th></tr>
   <tr>
-    <th>Codex Micro 工作区</th>
-    <th>super.engineering 工作区 <em>（可选）</em></th>
-  </tr>
-  <tr>
-    <td width="50%"><img src="artifacts/dashboard-preview-v2-round.png" alt="显示六项控制、连接状态、额度、重置时间和电量的 Codex Micro 工作区"></td>
-    <td width="50%"><img src="artifacts/super-workspace-preview.png" alt="显示 SUPER 状态、连接、电量和四个方向控制的 super.engineering 工作区"></td>
+    <td width="33%"><img src="artifacts/dashboard-preview-v2-round.png" alt="含六项控制、额度与电量的 Codex Micro 面板"></td>
+    <td width="33%"><img src="artifacts/super-workspace-preview.png" alt="四色三角形、无独立中心边框的 SUPER 屏幕"></td>
+    <td width="33%"><img src="artifacts/hermes-workspace-preview.png" alt="含 CYCLE、PREV、NEXT、NEW 的 HERMES 屏幕"></td>
   </tr>
 </table>
 
-Codex Micro 是默认的 ChatGPT/Codex 控制界面，提供 Agent 状态、额度、语音、
-Send 和可配置方向。super.engineering 是可选的前台感知集成，用于进入或离开
-该应用、切换项目和前进会话标签页；未启用它时，完整的 Codex Micro 体验不受影响。
+以上是 native framebuffer 设计预览，不是真机照片。
 
-| StopWatch 输入 | Codex Micro 工作区 | super.engineering 工作区 |
-| --- | --- | --- |
-| 长按左侧实体键 | Push to talk | 无动作¹ |
-| 按右侧实体键 | 切换 Voice Chat | 无动作¹ |
-| 点击中央 | Send | 无动作¹ |
-| 向左滑动 | 用户可配置方向 | 进入或离开 super.engineering |
-| 向上滑动 | 用户可配置方向 | 上一个项目 |
-| 向下滑动 | 用户可配置方向 | 下一个项目 |
-| 向右滑动 | 用户可配置方向 | 下一个会话标签页 |
-| 电源控制 | 桌面休眠和旅行模式 | 相同电源行为 |
+**左滑循环：Codex / ChatGPT → SUPER → HERMES → Codex / ChatGPT。**
+当前 Codex / ChatGPT 入口使用 `com.openai.codex`，只算一个目标，不拆成两个。
+其他应用在前台时，左滑先进入 Codex。找不到或无法激活的目标不会被自动跳过。
+原来的“返回之前应用”已被固定循环替代。
 
-¹ 设备侧输入隔离需要匹配的 `usb-mic` 固件。使用默认固件时，这些实体按键和
-中央 Send 控件仍保留 Codex Micro 行为。
+| 输入 | Codex Micro | SUPER | HERMES |
+| --- | --- | --- | --- |
+| 左实体键 / 右实体键 / 中心短点 | Push to talk / Voice Chat / Send | 无动作¹ | 无动作¹ |
+| 左滑 | 进入 SUPER | 进入 HERMES | 进入 Codex |
+| 上滑 | 应用现有映射 | 上一个项目 | 上一个会话 Tab |
+| 下滑 | 应用现有映射 | 下一个项目 | 下一个会话 Tab |
+| 右滑 | 应用现有映射 | 下一个会话 Tab | 新建会话 Tab |
+| 电源操作 | 桌面休眠 / 旅行关机 | 相同 | 相同 |
+
+¹ 专属屏幕和设备侧隔离需要用户明确选择、且匹配的 `usb-mic` 固件。
+默认无线固件仍显示 Codex 面板；Companion 方向控制仅在真实 `--watch` 中启用。
 
 ## Codex Micro 工作区
 
 默认仪表盘显示 Agent 状态、本周 Codex 剩余额度、reset 倒计时、电量和
 充电/Dock 状态，以及 Codex、BLE 和额度同步是否健康。Agent 完成时会变绿并
 播放柔和提示音。左侧实体键是 Push to talk，右键是 Voice Chat，中央圆盘是
-Send，四个滑动方向仍在 ChatGPT Desktop 中由用户配置；实体键和触摸手势均有
+Send，上/下/右仍在 ChatGPT Desktop 中配置，Companion 真实 watch 模式下左滑用于工作区循环；实体键和触摸手势均有
 振动反馈。
 
 兼容的 `Codex Micro` BLE HID 通道负责控制；本地额度 companion 使用独立的
@@ -60,47 +58,51 @@ ChatGPT Desktop 仅暴露一个 Mic key，而非单独的 `ACT10` 和 `ACT11`：
 较慢旅行模式兜底。物理电源切换的 soak 测试仍待完成，因此时间和唤醒行为在
 清单完成前均为实验性。
 
-## 可选的 super.engineering 工作区
+## super.engineering 工作区
 
-此集成为可选功能，并且只按准确 bundle identifier
-`com.zarifpour.superconductor` 识别 super.engineering。它只发送固定的工作区
-模式和定向快捷键事件；不会读取或传输项目名、会话名、窗口、Space、工作区
-状态、提示词、对话、凭据或配置内容。
+仅匹配 `com.zarifpour.superconductor`。在应用快捷键中配置：
+Previous Project = `Control-Option-Up`、Next Project = `Control-Option-Down`、
+Next Tab = `Control-Option-Right`。上/下/右仅定向发送给该前台进程。
+左滑进入 Hermes，不再返回任意旧应用。
 
-### 配置
+## Hermes Desktop 工作区
 
-1. 将 super.engineering 分配到一个专用的普通 macOS Space：创建 Space、把
-   应用移入其中，然后选择 **Dock → Options → Assign To → This Desktop**。
-   Companion 不会创建或枚举 Space。
-2. 在 super.engineering 的 **Keyboard Shortcuts** 中设置 **Previous Project**
-   = `Control-Option-Up`、**Next Project** = `Control-Option-Down`、**Next Tab**
-   = `Control-Option-Right`。
-3. 为已安装的 `CodexWatchCompanion.app` 同时开启输入监控和辅助功能。
-   项目/标签导航需要辅助功能；Companion 不会自行修改 macOS 权限。
-4. 只让 ChatGPT 的 Analog stick left 方向保持未绑定，保留原有的上、下、右映射。
+仅匹配原生桌面应用 `com.nousresearch.hermes`，不是 CLI、网页面板或安装器。
+上滑发送 `Control-Shift-Tab`，下滑发送 `Control-Tab`，右滑以 `Command-T`
+新建会话 Tab，依据 [官方桌面快捷键](https://hermes-agent.nousresearch.com/docs/user-guide/desktop#windows-tabs--panes)。
+如果改过绑定，请先用物理键盘确认；Companion 不读取、不修改 Hermes 设置，
+也不自动重试新建 Tab。
 
-向左滑动进入 super.engineering；当它已在前台时，向左滑动会返回准确的前一个
-前台应用。向上选择 Previous Project，向下选择 Next Project，向右选择 Next
-Tab。这些由 Companion 驱动的进入、返回、项目和标签控制不依赖 USB-mic 镜像。
-自动物理 SUPER 屏幕、其固件租约和设备侧输入隔离需要单独由用户选择、且相匹配的
-`usb-mic` 镜像。安装该镜像后，手表跟随前台应用，每 5 秒刷新一次 SUPER；没有
-有效租约时，会在 15 秒内回退到 Codex。前台应用变化不会强制唤醒屏幕。
+## 共用配置与屏幕行为
 
-安装匹配的 `usb-mic` 镜像后，SUPER 激活时会隔离 Agent、Send、Voice Chat 和
-ChatGPT 实体键动作，同时保留四个工作区滑动和电源控制。禁用输入不会发出 HID
-动作或成功振动；进入时会释放任何按住的麦克风/语音控制。返回 Codex 后，现有
-控制全部恢复。Companion 仅在该准确应用位于前台时处理上、下、右，并向该进程
-定向发送固定按键，不发送全局输入。
+1. 安装三个目标桌面应用。需要独立 Space 时，人工使用
+   **Dock → Options → Assign To → This Desktop** 分配。
+   Companion 仅激活应用，不创建/枚举 Space，也不选择具体窗口。
+2. 为 `CodexWatchCompanion.app` 开启输入监控、辅助功能，并保留额度同步所需的蓝牙权限。
+3. ChatGPT 控制器的 **Analog stick left** 保持未绑定，上/下/右保留现有映射。
+   权限变更后重启原 Companion LaunchAgent。
+4. 在源码验证、备份及当次准确端口刷写确认后，再安装匹配的 Companion 和明确选择的 USB-mic 固件。
 
-### 验收清单
+SUPER/HERMES 使用四个向外三角形，不绘制独立中心方框。每次本地有效滑动从
+12 色池中抽取四种不同边框颜色，每个方向不沿用自己的上一次颜色，文字色保持稳定。
+配色反馈独立执行 800ms 冷却；重绘、心跳、额度变化和 Dock/Command-Tab 切换不换色。
+换色只是本地输入反馈，不证明 Mac 快捷键执行成功。
 
-- 向左进入分配的 super.engineering Space，并返回准确的前一个应用和 Space。
-- 向上和向下可见地选择上一个/下一个项目；向右按该应用自身的循环行为前进到
-  Next Tab。
-- 使用单独选择且匹配的 `usb-mic` 镜像后，super.engineering 在前台时显示 SUPER；
-  停止 Companion 或失去租约后，在 15 秒内恢复 Codex。
-- 使用该匹配的 `usb-mic` 镜像后，SUPER 会阻止 Agent、Send、Voice Chat 和
-  ChatGPT 实体键动作；返回后 Codex 控制和 ChatGPT 的上/下/右映射都恢复正常。
+屏幕跟随真实前台，心跳 5 秒、连接所有者租约 15 秒。离开两个方向桌面时发送 Codex；
+失败时最多再间隔 5 秒重试两次，租约过期或所有者断开则恢复 Codex。
+前台变化不唤醒屏幕；禁用短点和实体控制也不唤醒方向桌面，真实滑动可以唤醒，
+但该次唤醒滑动不同时执行看不见的操作。中央长按及红色电源行为保留。
+
+SUPER/HERMES 隔离 Agent、Send、ChatGPT 麦克风/语音按键；模式切换释放已按住的控制，
+不补发过期完成提示，USB 麦克风端点持续可用。
+MainActor 路由在发送前校验前台 PID/bundle，只投递固定的进程定向按键，
+不使用全局键盘注入，不读取应用内容。
+
+### 仍需实机验收
+
+确认完整左滑循环、未启动应用启动、失败不跳过、Space、各方向动作、防重复、
+随机色、熄屏唤醒、输入隔离、ChatGPT 无后台误动作、15 秒回退、断开重连、
+USB 麦克风短采集、额度及原自动启动。构建和 native 预览不等于 C152 实机通过。
 
 ## 推荐安装方式
 
@@ -127,14 +129,14 @@ USB-C 线，以及已登录且支持 Codex Micro 的 ChatGPT Desktop。本移植
 6. 刷机后使用 `python3 scripts/serial_probe.py <准确端口> --seconds 30 --expect
    CODEX_MICRO_STOPWATCH_READY` 验证启动标记，再引导我完成 macOS 蓝牙配对。
 7. 帮我给 ChatGPT 开启输入监控，并配置 ChatGPT Desktop：左键 = Push to talk，
-   Command Key 4 = Toggle voice chat，中间 = Send；四个滑动方向由我选择。
+   Command Key 4 = Toggle voice chat，中间 = Send；上/下/右保留可配置，左方向留空供 watch 模式循环。
 8. 从源码编译 Swift 额度 companion。先用 demo discovery 找出这台 Mac 看到的
    CoreBluetooth UUID，再把真实额度写入绑定到这一台设备。
 9. 如果我同意开机自动运行，只在本机生成 app wrapper 和 LaunchAgent。路径、UUID、
    日志和生成的 app 都不能进入 Git。
 10. 分别验证两个实体键、中央 Send、四向滑动、Agent 颜色、完成提示音、振动、
     真实额度和 reset 更新。没有在真机观察到的结果必须明确标成未验证。
-11. 只有在我明确选择可选 super.engineering 阶段时，才引导我进行 Space、快捷键
+11. 只有在我明确选择可选 SUPER/HERMES 阶段时，才引导我进行 Space、快捷键
     和验收配置。不要静默开启辅助功能、修改 super.engineering 设置或分配 Space。
 12. 除非我明确选择该独立阶段，不要选择或刷入可选 USB 麦克风镜像。
 ```
@@ -148,7 +150,7 @@ Codex 负责终端工作；用户仍需确认缺失工具和准确刷机操作�
 蓝牙** 中配对 **Codex Micro**，并在 **系统设置 > 隐私与安全性 > 输入监控** 中
 允许 **ChatGPT**，随后退出并重新打开 ChatGPT。请在 **ChatGPT Desktop >
 Settings > Codex Micro** 配置动作。基础安装需要为本地构建的 companion 授予蓝牙
-访问；可选 super.engineering 阶段还需要为 `CodexWatchCompanion.app` 开启输入
+访问；可选 SUPER/HERMES 阶段还需要为 `CodexWatchCompanion.app` 开启输入
 监控和辅助功能。
 
 从源码构建额度 companion，运行 demo discovery，并且只将真实写入绑定到该 Mac
@@ -183,10 +185,10 @@ Server，并读取 `account/rateLimits/read`。它只通过项目自有额度 GA
 明确绑定的手表发送剩余百分比和 reset 倒计时；兼容 HID 接口不包含账户额度。
 
 在真实 `--watch` 运行中，可选工作区集成还仅通过 vendor HID Report ID 6 发送
-固定的 `codex` 或 `super` 显示模式枚举。它不会发送 API key、token、账户标识、
+固定的 `codex`、`super` 或 `hermes` 显示模式枚举。它不会发送 API key、token、账户标识、
 提示词、任务文本、音频、项目/会话/窗口/Space 元数据或用户内容；不会抓取 UI、
 使用云中继、检查键盘文本、调用 shell 或 AppleScript、使用私有 Space API，或
-检查 super.engineering 设置。
+检查 super.engineering 或 Hermes 设置。
 
 设备 MAC 地址、CoreBluetooth UUID、用户名、home-directory path 和日志均为
 本地安装数据，绝不能提交。BLE 配对使用平台的无 passkey Just Works 流程：请在
@@ -280,10 +282,10 @@ swift build -c release
 
 ### 可选工作区导航不可用
 
-- 确认前台 bundle 是 `com.zarifpour.superconductor`，三项固定快捷键能由物理
+- 确认前台 bundle 是 `com.zarifpour.superconductor` 或 `com.nousresearch.hermes`，对应快捷键能由物理
   键盘使用，且 `CodexWatchCompanion.app` 已开启辅助功能。
 - 输入监控是接收径向手势所必需的。若缺少辅助功能，仅项目/标签导航会被禁用；
-  左滑进入/返回、额度和 USB 麦克风输入仍可用。
+  左滑循环、额度和 USB 麦克风输入仍可用。
 
 ## 致谢、许可证与商标
 
@@ -295,8 +297,8 @@ swift build -c release
 2. [`digitsisyph/codex-micro-stopwatch`](https://github.com/digitsisyph/codex-micro-stopwatch)
    将其中部分 BLE 兼容层改编到 M5Stack StopWatch C152，并进一步加入 StopWatch
    UI、电源逻辑、额度 Companion 和可选 USB 麦克风；本仓库直接建立在这套代码基础上。
-3. **Stopwatch AgentBezel C152** 延续 StopWatch 代码线，增加 Codex Micro 与可选
-   super.engineering 双工作区、Companion 联动和独立 SUPER 屏幕。
+3. **Stopwatch AgentBezel C152** 延续 StopWatch 代码线，增加 Codex Micro、
+   super.engineering 与 Hermes Desktop 工作区、Companion 前台联动和独立方向屏幕。
 
 这里描述的是实现谱系，并不表示这些仓库是运行时包依赖，也不表示它们彼此存在官方
 隶属关系。后续每一层实现都依赖、引用并扩展了前人的开源成果。再次分发时，请保留原始

@@ -176,7 +176,7 @@ SUPER 与 HERMES 共用一套几何与绘制逻辑，仅固定标题及右侧文
 
 保留 Stopwatch AgentBezel C152 公共品牌、受保护运行标识、上游 MIT 和 NOTICE 引用。所有公开文案继续说明独立、非官方、实验性和未文档化的兼容性。
 
-不读取或传输 Hermes/SUPER/Codex 项目、会话、工作区、窗口标题、内存、提示词、配置或凭据；不把个人路径、用户名、设备标识、录音及本地浏览器会话 URL 写入受版本控制文件。Companion 不运行 `sc`、shell、AppleScript、CLI 或任意宏；开发阶段编译/测试命令与运行时行为分开。
+不读取或传输 Hermes/SUPER/Codex 项目、会话、工作区、窗口标题、内存、提示词、配置或凭据；不把个人路径、用户名、设备标识、录音及本地浏览器会话 URL 写入受版本控制文件。Companion 的工作区控制通道不运行 `sc`、shell、AppleScript、CLI 或任意宏；既有 Codex App Server 额度子进程保持不变。开发阶段编译/测试命令与运行时行为分开。
 
 ## 10. 当前证据与下一步
 
@@ -184,5 +184,6 @@ SUPER 与 HERMES 共用一套几何与绘制逻辑，仅固定标题及右侧文
 - 浏览器层已观察：完整循环、失败保留模式、800ms 忽略重复、外部前台模拟衔接、随机四色及每边变化。
 - 配色抽样逻辑曾运行 10000 次检查；这仅是原型算法验证，不是固件验证。
 - 基线 `3c955f3` 在新 worktree 重新运行 9 项 native 测试通过；UI 测试使用最小 M5GFX 类型头，未声称完成实际 framebuffer 验证。
-- 新功能的固件构建、Swift XCTest、Companion 安装、刷写、物理控制与屏幕均未执行。
-- 书面规格审阅通过后，使用 writing-plans 编写实施计划，再以 executing-plans 在当前会话串行实施，每任务独立测试、审查与提交。
+- 代码实现已完成；10 项 native 测试、USB-mic 构建、固定 SDK release、53 项临时 Swift harness 与 JSON smoke 通过，完整 XCTest 因 CLT 缺少模块不可执行。
+- 已生成并检查 native framebuffer；Companion 安装、刷写与新增功能的物理验收未执行。
+- 详细分层证据见 [implementation validation](../plans/2026-09-04-hermes-desktop-workspace-validation.md)。

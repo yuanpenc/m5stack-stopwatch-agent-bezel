@@ -11,6 +11,8 @@ __pycache__/
 # Local firmware and UI artifacts. Keep only the curated public preview.
 artifacts/*
 !artifacts/dashboard-preview-v2-round.png
+!artifacts/super-workspace-preview.png
+!artifacts/hermes-workspace-preview.png
 
 # The companion is built and wrapped locally so Bluetooth permission, device
 # binding, executable paths, and logs never become repository data.
