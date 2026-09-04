@@ -1,5 +1,10 @@
 # Hermes Desktop 与三桌面循环设计
 
+> 历史初版规格：下文 HERMES 的 NEW／Command-T 设计已由
+> [上下浏览、右滑 OPEN](../plans/2026-09-04-hermes-open-selection.md) 替代。
+> 源码实现、安装及约定实机验收已完成，见
+> [最终验收记录](../plans/2026-09-04-hermes-open-physical-acceptance.md)。
+
 ## 状态与范围
 
 - 状态：Approved。用户确认开始代码实现；按本规格串行实施，硬件验收另行进行。

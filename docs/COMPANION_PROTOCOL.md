@@ -109,6 +109,17 @@ request number. It never contains project/session/window/Space/workspace data,
 credentials, prompts or user content. No report payloads or device identifiers
 are logged.
 
+## Host-side direction mapping
+
+The HERMES `OPEN` label is not a new RPC. Radial input still carries the same
+directions; only the Mac's exact-foreground application profile maps Hermes
+right to a Control press/release (virtual key 59, Control flag on press and no
+flags on release). CoreGraphics represents this modifier pair as `flagsChanged`
+events, delivered only to the validated target PID. It does not send Return or
+Command-T, read the picker, or carry a selected session identifier. Up/down keep
+their existing Control-Shift-Tab / Control-Tab chords. See
+[physical acceptance and protocol limits](superpowers/plans/2026-09-04-hermes-open-physical-acceptance.md).
+
 ## Optional maintenance request
 
 Only the USB-microphone image accepts this write-with-response request:

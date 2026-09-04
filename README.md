@@ -9,8 +9,10 @@ Desktop session controls, with a local quota dashboard and optional USB micropho
 
 Codex Micro compatibility is experimental and undocumented. Runtime names,
 pairing identities, audio selection and the local Companion identity remain
-unchanged. New three-app behavior requires matching source builds; physical
-acceptance of this revision is pending.
+unchanged. Three-app behavior requires matching source builds. The agreed
+USB-mic C152 physical acceptance checklist is complete for source revision
+`5e9cc25`; see the [results and limits](docs/superpowers/plans/2026-09-04-hermes-open-physical-acceptance.md).
+This is validation of one local setup, not a guarantee for every app version.
 
 ## Three workspaces
 
@@ -35,8 +37,8 @@ app” behavior is replaced by this fixed cycle.
 | --- | --- | --- | --- |
 | Left physical / right physical / center tap | Push to talk / Voice Chat / Send | No action¹ | No action¹ |
 | Swipe left | Enter SUPER | Enter HERMES | Enter Codex |
-| Swipe up | Existing app mapping | Previous project | Previous session Tab |
-| Swipe down | Existing app mapping | Next project | Next session Tab |
+| Swipe up | Existing app mapping | Previous project | Browse previous session |
+| Swipe down | Existing app mapping | Next project | Browse next session |
 | Swipe right | Existing app mapping | Next session Tab | Open highlighted session |
 | Power controls | Desk sleep / Travel Mode | Same | Same |
 
@@ -53,6 +55,10 @@ chime. The left physical button is Push to talk, the right button is Voice
 Chat, the center dial is Send, and up/down/right remain configurable in ChatGPT Desktop; left is reserved for
 workspace cycling while the Companion runs in real watch mode. Physical buttons and touch gestures use
 haptics.
+
+The normal center dial uses four balanced rows: connection status, remaining
+quota, reset countdown and battery. It omits the redundant `WEEKLY LEFT` label;
+diagnostic states retain messages such as `SYNC STALE` and `WAITING CODEX`.
 
 The compatible `Codex Micro` BLE HID channel carries controls. The local quota
 companion uses a separate, project-owned BLE GATT service, so the watch never
@@ -90,8 +96,10 @@ Verify the behavior with a physical keyboard on your Hermes version before
 installation. Native browsing can depend on the focused Tab region; it is not
 project-tree-order navigation. No Hermes plugin or source extension is required.
 The Companion does not inspect the picker, read/change Hermes settings or
-session data, or retry confirmation. Physical right-swipe acceptance is separate
-from verifying the native keyboard action.
+session data, or retry confirmation. Both the keyboard action and physical
+browse/open gestures were confirmed on the tested installation, including
+repeat-right and no-picker checks without new sessions, sent drafts or a stuck
+Control modifier. Repeat acceptance after changing Hermes versions.
 
 ## Shared workspace setup and screen behavior
 
@@ -108,6 +116,8 @@ from verifying the native keyboard action.
    after source validation, backups and exact-port flash confirmation.
 
 SUPER/HERMES share four outward triangles, with no independent center outline.
+The battery icon and percentage are centered together beneath the title and
+connection status, including unknown and three-digit percentages.
 Every accepted local swipe picks four distinct colors from a 12-color pool;
 each direction changes from its previous color. Text colors remain stable.
 Palette feedback has its own 800ms cooldown; redraw, heartbeat, quota updates
@@ -128,9 +138,16 @@ The USB microphone endpoint remains available. MainActor routing revalidates
 the exact foreground PID/bundle before fixed process-targeted key delivery;
 no global key injection or application-content reading is used.
 
-### Physical acceptance still required
+### Validation status and checks for your installation
 
-Verify one full left-swipe cycle, cold app launch, failure/no-skip, assigned
+The [physical acceptance record](docs/superpowers/plans/2026-09-04-hermes-open-physical-acceptance.md)
+separates user-observed UI/controls/audio from uploader, runtime-log and build
+evidence. The tested setup passed the agreed browse/open, three-workspace,
+input-isolation, sleep, lease-fallback, reconnect, microphone and quota checks.
+Full XCTest remains unavailable on the development host because its Command
+Line Tools lack XCTest; the Swift harness is not a complete XCTest run.
+
+For each new installation, verify one full left-swipe cycle, cold app launch, failure/no-skip, assigned
 Spaces, all app-specific directions, 800ms gating, random colors, sleep/wake,
 input isolation, no background ChatGPT actions, 15-second fallback, reconnect,
 USB microphone capture, quota updates and original automatic startup.

@@ -88,6 +88,13 @@ Prepare the applications and permissions:
    existing LaunchAgent after permissions change; do not start a second watch
    process.
 
+After replacing and re-signing a locally ad-hoc-signed Companion, macOS may
+retain permissions for the old signature. If fresh logs reject input or
+Accessibility, remove the old entry and re-add the installed app in the relevant
+permission pane, then restart the original LaunchAgent. Do not reset all TCC
+permissions, change the app identity or create another watch process. Require
+both clean fresh logs and a successful physical gesture before calling it fixed.
+
 Missing Input Monitoring warns once without stopping quota sync. Missing
 Accessibility warns once and disables only SUPER/HERMES navigation; left
 activation, display synchronization, quota and USB microphone remain separate.
@@ -154,10 +161,14 @@ swift ../scripts/hid_rpc_probe.swift --workspace-hermes
 swift ../scripts/hid_rpc_probe.swift --workspace-codex
 ```
 
-The current three-workspace implementation has automated build/harness
-verification; installation, gesture compatibility, Space switching, sleep,
-lease timeout, reconnect and USB microphone regression still require physical
-acceptance. Build results alone do not establish those outcomes.
+The agreed physical acceptance checklist for source revision `5e9cc25` is
+complete on the tested USB-mic C152 setup; see the
+[layered acceptance record](../docs/superpowers/plans/2026-09-04-hermes-open-physical-acceptance.md).
+It includes browse/open and no-background-action checks, sleep, lease fallback,
+reconnect and local microphone recording/playback. New installations and app
+updates still need their own acceptance. Build/harness results do not establish
+hardware success, and the development host's missing XCTest remains an
+environment limitation rather than a passing XCTest suite.
 
 ## Optional USB-mic bootloader request
 

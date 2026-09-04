@@ -1,5 +1,10 @@
 # Hermes Open Selection Implementation Plan
 
+**Status:** Implemented, installed and agreed physical acceptance complete.
+See the [final acceptance record](2026-09-04-hermes-open-physical-acceptance.md)
+for observed results and limits; original implementation constraints below
+describe the pre-installation phase.
+
 > **For agentic workers:** Use `executing-plans` in this session, serially,
 > with test-driven development and no subagents.
 
@@ -80,19 +85,20 @@ and status annotations on the superseded sidebar design/capability gate.
   contacting the real account or recording its quota values.
 - [x] Review full baseline diff and `git diff --check`; commit documentation
   and generated preview. Report code, builds and hardware separately.
-- [ ] Show the OPEN preview and stop before installed-app replacement/flash.
+- [x] Show the OPEN preview and stop before installed-app replacement/flash;
+  the user subsequently approved installation and the freshly resolved port.
 
 ## Physical acceptance after separately authorized installation
 
-- [ ] In Hermes, up/down selects the expected highlighted item; right opens it.
-- [ ] Repeated right does not create sessions or send draft text.
-- [ ] Without a picker, right does not send or alter draft text.
-- [ ] Left leaves Hermes; SUPER right remains next Tab; Codex original controls
+- [x] In Hermes, up/down selects the expected highlighted item; right opens it.
+- [x] Repeated right does not create sessions or send draft text.
+- [x] Without a picker, right does not send or alter draft text.
+- [x] Left leaves Hermes; SUPER right remains next Tab; Codex original controls
   remain intact; no background action or stuck Control modifier.
-- [ ] USB microphone, workspace lease and quota behavior remain functional.
+- [x] USB microphone, workspace lease and quota behavior remain functional.
 
-The user's keyboard confirmation is observed evidence for the native action,
-not evidence that the new process-targeted pair or physical swipe is installed.
+Keyboard confirmation and installed physical swipe acceptance were separate
+checks. The user subsequently confirmed all items above on the installed C152.
 
 ## Verification record
 
@@ -121,5 +127,7 @@ not evidence that the new process-targeted pair or physical swipe is installed.
   `a6a685cc8ee857b37faa912a58d7dcce1b12a3fdde5d154f2e18227b351a917f`.
 - Unsigned build executable SHA-256 (installation signing will change it):
   `e81b795add2f2134477ce0ead2b925f5360b01c102a82b6a5ed488e52317fc25`.
-- Not installed or flashed. All physical swipe, microphone and quota acceptance
-  for this revision remains unverified; existing restoration artifacts retained.
+- At implementation closeout this revision had not been installed or flashed.
+  The separately authorized installation and agreed physical checks are now
+  complete; see the final acceptance record linked above. Recovery backups
+  remain private and retained. No push or merge was performed.

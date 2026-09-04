@@ -1,5 +1,10 @@
 # Hermes workspace implementation validation
 
+> Historical pre-installation report. Its NEW action and artifact fingerprints
+> describe the original implementation stage, not the installed OPEN revision.
+> Current installation and user-observed results are recorded in
+> [Hermes OPEN physical acceptance](2026-09-04-hermes-open-physical-acceptance.md).
+
 Date: 2026-09-04. Branch: `feature/hermes-desktop-workspace`.
 Reviewed source base: `3c955f3`; final runtime revision: `b03c2f0`.
 

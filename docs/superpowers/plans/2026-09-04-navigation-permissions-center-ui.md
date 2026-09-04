@@ -1,6 +1,10 @@
 # Navigation permissions and center UI refinement
 
-Status: Approved implementation; preview and physical acceptance pending.
+Status: Historical UI implementation record; preview and agreed physical
+acceptance subsequently completed with the OPEN revision. See
+[final acceptance](2026-09-04-hermes-open-physical-acceptance.md).
+The original new-Tab mapping and intermediate firmware fingerprint below are
+historical; current Hermes right confirms the selected session instead.
 Date: 2026-09-04. Branch: `feature/hermes-desktop-workspace`.
 Source baseline: `9676b6f`.
 

@@ -1,5 +1,10 @@
 # Hermes Desktop Workspace Implementation Plan
 
+> Historical initial implementation plan. Hermes NEW/Command-T was later
+> superseded by [browse and OPEN](2026-09-04-hermes-open-selection.md).
+> The separately authorized installation and agreed physical checklist are now
+> complete: [final acceptance](2026-09-04-hermes-open-physical-acceptance.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use executing-plans in this session. Do not use subagents. Steps below are tracked as implementation proceeds.
 
 **Goal:** Add HERMES, three-app left-swipe cycling, borderless shared controls and a 12-color gesture palette without modifying the installed system.
