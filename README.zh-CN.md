@@ -16,7 +16,7 @@ Companion 身份保持不变。新版三应用行为需要匹配的源码构建�
   <tr>
     <td width="33%"><img src="artifacts/dashboard-preview-v2-round.png" alt="含六项控制、额度与电量的 Codex Micro 面板"></td>
     <td width="33%"><img src="artifacts/super-workspace-preview.png" alt="四色三角形、无独立中心边框的 SUPER 屏幕"></td>
-    <td width="33%"><img src="artifacts/hermes-workspace-preview.png" alt="含 CYCLE、PREV、NEXT、NEW 的 HERMES 屏幕"></td>
+    <td width="33%"><img src="artifacts/hermes-workspace-preview.png" alt="含 CYCLE、PREV、NEXT、OPEN 的 HERMES 屏幕"></td>
   </tr>
 </table>
 
@@ -33,7 +33,7 @@ Companion 身份保持不变。新版三应用行为需要匹配的源码构建�
 | 左滑 | 进入 SUPER | 进入 HERMES | 进入 Codex |
 | 上滑 | 应用现有映射 | 上一个项目 | 上一个会话 Tab |
 | 下滑 | 应用现有映射 | 下一个项目 | 下一个会话 Tab |
-| 右滑 | 应用现有映射 | 下一个会话 Tab | 新建会话 Tab |
+| 右滑 | 应用现有映射 | 下一个会话 Tab | 打开高亮会话 |
 | 电源操作 | 桌面休眠 / 旅行关机 | 相同 | 相同 |
 
 ¹ 专属屏幕和设备侧隔离需要用户明确选择、且匹配的 `usb-mic` 固件。
@@ -68,10 +68,15 @@ Next Tab = `Control-Option-Right`。上/下/右仅定向发送给该前台进程
 ## Hermes Desktop 工作区
 
 仅匹配原生桌面应用 `com.nousresearch.hermes`，不是 CLI、网页面板或安装器。
-上滑发送 `Control-Shift-Tab`，下滑发送 `Control-Tab`，右滑以 `Command-T`
-新建会话 Tab，依据 [官方桌面快捷键](https://hermes-agent.nousresearch.com/docs/user-guide/desktop#windows-tabs--panes)。
-如果改过绑定，请先用物理键盘确认；Companion 不读取、不修改 Hermes 设置，
-也不自动重试新建 Tab。
+上滑发送 `Control-Shift-Tab`，下滑发送 `Control-Tab`，保留
+[原生桌面浏览快捷键](https://hermes-agent.nousresearch.com/docs/user-guide/desktop#windows-tabs--panes)。
+屏幕中央会话选择器出现时，上下选择、右滑打开高亮会话。右滑发送一次
+Control 按下/松开，结束时清除修饰键标记；已用物理键盘确认 Hermes 0.17.0
+选择器在 Control 松开时确认。右滑不发送 Enter 或 Command-T，不再新建 Tab。
+安装前请核验你的 Hermes 版本；原生浏览受聚焦 Tab 区域影响，并不保证按
+Project 树排序。无需 Hermes 插件或源码扩展。Companion 不检测选择器状态，
+不读取会话数据或应用设置，也不自动重试确认。物理键盘确认与手表右滑验收
+是两个独立层级。
 
 ## 共用配置与屏幕行为
 

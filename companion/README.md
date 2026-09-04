@@ -61,7 +61,7 @@ modes do not create these controllers.
 | --- | --- | --- | --- | --- |
 | Codex / ChatGPT (`com.openai.codex`) | SUPER | Existing ChatGPT binding | Existing ChatGPT binding | Existing ChatGPT binding |
 | SUPER (`com.zarifpour.superconductor`) | HERMES | Previous Project | Next Project | Next Tab |
-| HERMES (`com.nousresearch.hermes`) | Codex | Previous Tab | Next Tab | New Tab |
+| HERMES (`com.nousresearch.hermes`) | Codex | Previous / browse | Next / browse | Open selection |
 
 From any other foreground app, left activates Codex first. This is a fixed
 cycle, not a remembered-return toggle. The companion activates a running app
@@ -77,8 +77,11 @@ Prepare the applications and permissions:
    enumerate or control Spaces with private APIs.
 2. Configure SUPER **Previous Project**, **Next Project**, **Next Tab** as
    `Control-Option-Up`, `Control-Option-Down`, `Control-Option-Right`.
-3. Keep Hermes Desktop's default `Control-Shift-Tab`, `Control-Tab`,
-   `Command-T` bindings for previous, next and new session Tab.
+3. Keep Hermes Desktop's default `Control-Shift-Tab` and `Control-Tab` browsing
+   bindings. Right sends Control down with its modifier set, then Control up
+   with empty flags to commit the highlighted central-picker session. It sends
+   neither Return nor Command-T. First verify a physical Control tap/release
+   commits the picker on your Hermes version (confirmed on 0.17.0).
 4. Leave only ChatGPT **Analog stick left** unassigned; retain up/down/right.
 5. Enable the installed `CodexWatchCompanion.app` under **System Settings →
    Privacy & Security → Input Monitoring** and **Accessibility**. Restart the
@@ -88,6 +91,11 @@ Prepare the applications and permissions:
 Missing Input Monitoring warns once without stopping quota sync. Missing
 Accessibility warns once and disables only SUPER/HERMES navigation; left
 activation, display synchronization, quota and USB microphone remain separate.
+Hermes uses its native picker/Tab navigation, not sidebar project-tree order.
+The companion does not inspect picker state or read session/project data. A
+Control confirmation is not retried and does not hold Control across gestures.
+Test right both with and without the picker after installation; native keyboard
+confirmation alone does not prove process-targeted delivery or physical swipe.
 Up/down/right are companion no-ops in Codex and all other applications.
 Navigation uses fixed process-targeted CoreGraphics down/up pairs, revalidating
 the foreground identity and PID/bundle pair before delivery. It never posts

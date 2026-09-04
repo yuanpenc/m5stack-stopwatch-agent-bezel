@@ -1,5 +1,9 @@
 # Hermes 侧栏连续导航设计
 
+> 已取消：用户决定不扩展 Hermes 源码，改为保留原生上下浏览、右滑确认选择。
+> 下文仅为历史设计，不再授权或指导实施。当前方案见
+> [Hermes Open Selection](../plans/2026-09-04-hermes-open-selection.md)。
+
 ## 状态
 
 - 交互方案已批准：用户接受上下连续浏览会话、右滑跳转 Project。

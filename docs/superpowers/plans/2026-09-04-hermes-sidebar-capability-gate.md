@@ -1,5 +1,9 @@
 # Hermes Sidebar Navigation Capability Gate
 
+> Canceled by user: do not create a Hermes source worktree or implement the
+> proposed extension below. Historical evidence only. Superseded by
+> [Hermes Open Selection](2026-09-04-hermes-open-selection.md).
+
 > **For agentic workers:** Use `executing-plans` serially in the current session;
 > no subagents. This is the prerequisite capability gate, not authorization for
 > a Hermes core implementation or an installed-app replacement.

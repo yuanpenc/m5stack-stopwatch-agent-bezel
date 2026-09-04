@@ -19,7 +19,7 @@ acceptance of this revision is pending.
   <tr>
     <td width="33%"><img src="artifacts/dashboard-preview-v2-round.png" alt="Codex Micro dashboard with six controls, quota and battery"></td>
     <td width="33%"><img src="artifacts/super-workspace-preview.png" alt="SUPER with four colored triangles and no separate center border"></td>
-    <td width="33%"><img src="artifacts/hermes-workspace-preview.png" alt="HERMES with CYCLE, PREV, NEXT and NEW controls"></td>
+    <td width="33%"><img src="artifacts/hermes-workspace-preview.png" alt="HERMES with CYCLE, PREV, NEXT and OPEN controls"></td>
   </tr>
 </table>
 
@@ -37,7 +37,7 @@ app” behavior is replaced by this fixed cycle.
 | Swipe left | Enter SUPER | Enter HERMES | Enter Codex |
 | Swipe up | Existing app mapping | Previous project | Previous session Tab |
 | Swipe down | Existing app mapping | Next project | Next session Tab |
-| Swipe right | Existing app mapping | Next session Tab | New session Tab |
+| Swipe right | Existing app mapping | Next session Tab | Open highlighted session |
 | Power controls | Desk sleep / Travel Mode | Same | Same |
 
 ¹ Directional screens and device-side isolation require the explicitly chosen
@@ -81,10 +81,17 @@ Hermes; it does not return to an arbitrary previous app.
 
 Use the exact native app bundle `com.nousresearch.hermes`, not a CLI, web
 dashboard or installer. Up sends `Control-Shift-Tab`, down sends
-`Control-Tab`, and right sends `Command-T` for a new session Tab, following
-the [official Desktop shortcuts](https://hermes-agent.nousresearch.com/docs/user-guide/desktop#windows-tabs--panes).
-Verify these with a physical keyboard if you have rebound them. The Companion
-does not read or change Hermes settings and never retries a new-Tab command.
+`Control-Tab`, retaining the [native Desktop browsing shortcuts](https://hermes-agent.nousresearch.com/docs/user-guide/desktop#windows-tabs--panes).
+When the central session picker is visible, browse with up/down and swipe right
+to open the highlighted session. Right sends a Control press/release pair,
+ending with no modifier flags; the tested Hermes 0.17.0 picker commits on Control
+release. It does not send Return or Command-T, so right is no longer New Tab.
+Verify the behavior with a physical keyboard on your Hermes version before
+installation. Native browsing can depend on the focused Tab region; it is not
+project-tree-order navigation. No Hermes plugin or source extension is required.
+The Companion does not inspect the picker, read/change Hermes settings or
+session data, or retry confirmation. Physical right-swipe acceptance is separate
+from verifying the native keyboard action.
 
 ## Shared workspace setup and screen behavior
 
