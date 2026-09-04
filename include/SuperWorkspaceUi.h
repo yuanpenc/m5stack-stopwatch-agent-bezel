@@ -140,7 +140,6 @@ void drawDirectionalControl(Surface& surface,
 
 template <typename Surface>
 void drawCenterBattery(Surface& surface, const State& state) {
-  constexpr int batteryX = 183;
   constexpr int batteryY = 268;
   constexpr int batteryWidth = 31;
   constexpr int batteryHeight = 16;
@@ -148,6 +147,19 @@ void drawCenterBattery(Surface& surface, const State& state) {
       -1, std::min(100, static_cast<int>(state.batteryPercent)));
   const std::uint16_t color =
       battery < 0 ? kMuted : (battery <= 20 ? kWarning : kText);
+
+  char label[12];
+  if (battery < 0) {
+    std::snprintf(label, sizeof(label), "--%%");
+  } else {
+    std::snprintf(label, sizeof(label), "%d%%", battery);
+  }
+  surface.loadFont(dashboard::font_data::kSpaceMono18Vlw);
+  surface.setTextSize(1.0f);
+  constexpr int terminalWidth = 3;
+  constexpr int gap = 8;
+  const int groupWidth = batteryWidth + terminalWidth + gap + surface.textWidth(label);
+  const int batteryX = kCenterX - groupWidth / 2;
 
   surface.fillSmoothRoundRect(batteryX, batteryY, batteryWidth, batteryHeight,
                               3, color);
@@ -168,14 +180,8 @@ void drawCenterBattery(Surface& surface, const State& state) {
                          boltX - 3, batteryY + batteryHeight - 1, kText);
   }
 
-  char label[12];
-  if (battery < 0) {
-    std::snprintf(label, sizeof(label), "--%%");
-  } else {
-    std::snprintf(label, sizeof(label), "%d%%", battery);
-  }
-  surface.loadFont(dashboard::font_data::kSpaceMono18Vlw);
-  drawText(surface, label, 224, batteryY + batteryHeight / 2 + 1,
+  drawText(surface, label, batteryX + batteryWidth + terminalWidth + gap,
+           batteryY + batteryHeight / 2,
            middle_left, color);
   surface.unloadFont();
 }

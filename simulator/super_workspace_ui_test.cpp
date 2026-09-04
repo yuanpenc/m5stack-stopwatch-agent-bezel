@@ -11,20 +11,61 @@
 namespace {
 
 struct RecordingSurface {
+  struct TextDraw { std::string text; int x; int y; textdatum_t datum; };
+  std::vector<TextDraw> textDraws;
+  std::vector<std::array<int, 6>> roundRectangles;
+  textdatum_t datum = middle_center;
+  bool fontLoaded = false;
   std::vector<std::array<int, 5>> rectangles;
   std::vector<int> triangleColors;
   std::vector<std::string> texts;
   void fillScreen(int) {}
   void fillRect(int x, int y, int w, int h, int c) { rectangles.push_back({x,y,w,h,c}); }
   void fillTriangle(int, int, int, int, int, int, int c) { triangleColors.push_back(c); }
-  void fillSmoothRoundRect(int, int, int, int, int, int) {}
-  void loadFont(const std::uint8_t*) {}
-  void unloadFont() {}
-  void setTextDatum(textdatum_t) {}
+  void fillSmoothRoundRect(int x, int y, int w, int h, int r, int c) {
+    roundRectangles.push_back({x, y, w, h, r, c});
+  }
+  void loadFont(const std::uint8_t*) { fontLoaded = true; }
+  void unloadFont() { fontLoaded = false; }
+  int textWidth(const char* text) {
+    assert(fontLoaded);
+    return static_cast<int>(std::strlen(text)) * 11;
+  }
+  void setTextDatum(textdatum_t value) { datum = value; }
   void setTextSize(float) {}
   void setTextColor(int) {}
-  void drawString(const char* text, int, int) { texts.emplace_back(text); }
+  void drawString(const char* text, int x, int y) {
+    texts.emplace_back(text);
+    textDraws.push_back({text, x, y, datum});
+  }
 };
+
+void testBatteryAndLabelAreCenteredAsOneMeasuredGroup() {
+  struct Case { int percent; const char* label; int textWidth; };
+  const Case cases[] = {{0, "0%", 22}, {9, "9%", 22}, {78, "78%", 33},
+                        {100, "100%", 44}, {-1, "--%", 33}};
+  for (auto profile : {super_workspace::Profile::Super, super_workspace::Profile::Hermes}) {
+    for (bool charging : {false, true}) {
+      for (const auto& item : cases) {
+        super_workspace::State state;
+        state.profile = profile;
+        state.batteryPercent = item.percent;
+        state.charging = charging;
+        RecordingSurface surface;
+        super_workspace::drawCenterBattery(surface, state);
+        const auto& outline = surface.roundRectangles.at(0);
+        const auto& terminal = surface.roundRectangles.at(2);
+        const auto& label = surface.textDraws.at(0);
+        assert(label.text == item.label && label.datum == middle_left);
+        assert(label.x - (terminal[0] + terminal[2]) == 8);
+        const double center = (outline[0] + label.x + item.textWidth) / 2.0;
+        assert(std::abs(center - 233.0) <= 1.0);
+        assert(label.y == 276 && outline[1] + outline[3] / 2 == 276);
+        assert(!surface.fontLoaded);
+      }
+    }
+  }
+}
 
 void testSharedRendererDoesNotCoverTriangleBases() {
   super_workspace::State state;
@@ -178,6 +219,7 @@ void testNoUserContentOrCodexTelemetryFields() {
 }  // namespace
 
 int main() {
+  testBatteryAndLabelAreCenteredAsOneMeasuredGroup();
   testSharedRendererDoesNotCoverTriangleBases();
   testDirectionalGeometryAndPalette();
   testDedicatedVisualState();
