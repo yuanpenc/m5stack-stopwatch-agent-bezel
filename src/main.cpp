@@ -625,6 +625,13 @@ void updateTouchGesture(int x, int y) {
                                 controlForSwipe(direction))) {
     return;
   }
+  if (directionalWorkspaceActive() && !noteActivity()) {
+    // A real swipe may wake the screen, but must not act on unseen controls.
+    touchTracking = false;
+    clearTouchCandidate();
+    startHaptic(kButtonHapticIntensity, kWakeHapticDurationMs);
+    return;
+  }
 #endif
 
   clearTouchCandidate();
@@ -695,6 +702,9 @@ void updateTouchPowerHold() {
   const uint32_t now = millis();
   const uint32_t heldMs = now - touchSendStartedAtMs;
   if (!touchPowerHoldConsumed && heldMs >= kPowerHoldPromptMs) {
+#if defined(CODEX_STOPWATCH_USB_MIC)
+    if (directionalWorkspaceActive()) noteActivity();
+#endif
     touchPowerHoldConsumed = true;
     touchSendPressed = false;  // releasing now must not emit Send
 #if defined(CODEX_STOPWATCH_USB_MIC)
@@ -1104,6 +1114,11 @@ void loop() {
   const int touchX = touch.x;
   const int touchY = touch.y;
   if (touch.wasPressed()) {
+#if defined(CODEX_STOPWATCH_USB_MIC)
+    if (!workspace_input::touchDownWakes(state.workspaceMode)) {
+      beginTouchGesture(touchX, touchY);
+    } else
+#endif
     if (noteActivity()) {
       beginTouchGesture(touchX, touchY);
     } else {

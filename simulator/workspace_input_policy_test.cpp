@@ -5,6 +5,9 @@
 int main() {
   using workspace_input::Control;
   using workspace_mode::Mode;
+  assert(workspace_input::touchDownWakes(Mode::Codex));
+  assert(!workspace_input::touchDownWakes(Mode::Super));
+  assert(!workspace_input::touchDownWakes(Mode::Hermes));
   assert(!workspace_mode::isDirectional(Mode::Codex));
   assert(workspace_mode::isDirectional(Mode::Super));
   assert(workspace_mode::isDirectional(Mode::Hermes));

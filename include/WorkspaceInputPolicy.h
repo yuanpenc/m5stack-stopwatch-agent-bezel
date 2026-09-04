@@ -7,6 +7,11 @@
 
 namespace workspace_input {
 
+// Directional workspaces defer activity until a swipe or power hold is known.
+constexpr bool touchDownWakes(workspace_mode::Mode mode) {
+  return mode == workspace_mode::Mode::Codex;
+}
+
 enum class Control : std::uint8_t {
   SwipeUp,
   SwipeRight,
