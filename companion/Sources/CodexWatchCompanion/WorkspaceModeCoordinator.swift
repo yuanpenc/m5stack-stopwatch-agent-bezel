@@ -108,16 +108,18 @@ final class WorkspaceModeCoordinator {
     private let log: (String) -> Void
     private var sendersByDevice: [UInt: WorkspaceModeSending] = [:]
     private var heartbeat: WorkspaceModeScheduledTask?
+    private var codexRetry: WorkspaceModeScheduledTask?
+    private var remainingRetries: [UInt: Int] = [:]
     private var desiredMode = StopwatchWorkspaceMode.codex
     private var lastFailureLogAt: TimeInterval?
     private var started = false
+    private var lifecycle: UInt64 = 0
+    private var heartbeatGeneration: UInt64 = 0
+    private var retryGeneration: UInt64 = 0
 
-    init(
-        foregroundObserver: ForegroundApplicationObserving,
-        scheduler: WorkspaceModeScheduling,
-        uptime: @escaping () -> TimeInterval,
-        log: @escaping (String) -> Void
-    ) {
+    init(foregroundObserver: ForegroundApplicationObserving,
+         scheduler: WorkspaceModeScheduling,
+         uptime: @escaping () -> TimeInterval, log: @escaping (String) -> Void) {
         self.foregroundObserver = foregroundObserver
         self.scheduler = scheduler
         self.uptime = uptime
@@ -125,99 +127,137 @@ final class WorkspaceModeCoordinator {
     }
 
     convenience init(log: @escaping (String) -> Void) {
-        self.init(
-            foregroundObserver: SystemForegroundApplicationObserver(),
-            scheduler: SystemWorkspaceModeScheduler(),
-            uptime: { ProcessInfo.processInfo.systemUptime },
-            log: log
-        )
+        self.init(foregroundObserver: SystemForegroundApplicationObserver(),
+                  scheduler: SystemWorkspaceModeScheduler(),
+                  uptime: { ProcessInfo.processInfo.systemUptime }, log: log)
     }
 
-    var activeDeviceKeys: Set<UInt> {
-        Set(sendersByDevice.keys)
-    }
+    var activeDeviceKeys: Set<UInt> { Set(sendersByDevice.keys) }
 
     func start() {
         guard !started else { return }
         started = true
+        lifecycle &+= 1
+        let epoch = lifecycle
         foregroundObserver.start { [weak self] bundleIdentifier in
-            self?.foregroundApplicationChanged(bundleIdentifier)
+            guard let self, self.started, self.lifecycle == epoch else { return }
+            self.transition(to: self.mode(for: bundleIdentifier))
         }
         transition(to: mode(for: foregroundObserver.frontmostBundleIdentifier))
     }
 
     func attach(_ sender: WorkspaceModeSending) {
+        guard started else { return }
+        transition(to: mode(for: foregroundObserver.frontmostBundleIdentifier))
         sendersByDevice[sender.deviceKey] = sender
-        send(desiredMode, to: sender)
+        remainingRetries.removeValue(forKey: sender.deviceKey)
+        synchronize(sender)
     }
 
     func detach(deviceKey: UInt) {
         sendersByDevice.removeValue(forKey: deviceKey)
+        remainingRetries.removeValue(forKey: deviceKey)
+        if remainingRetries.isEmpty { cancelCodexRetry() }
     }
 
     func stop() {
-        sendToAll(.codex)
-        heartbeat?.cancel()
-        heartbeat = nil
-        if started {
-            foregroundObserver.stop()
+        guard started else { return }
+        for key in sendersByDevice.keys.sorted() {
+            if let sender = sendersByDevice[key] { _ = send(.codex, to: sender) }
         }
+        started = false
+        lifecycle &+= 1
+        cancelHeartbeat()
+        cancelCodexRetry()
+        foregroundObserver.stop()
         sendersByDevice.removeAll()
         desiredMode = .codex
-        started = false
-    }
-
-    private func foregroundApplicationChanged(_ bundleIdentifier: String?) {
-        guard started else { return }
-        transition(to: mode(for: bundleIdentifier))
     }
 
     private func mode(for bundleIdentifier: String?) -> StopwatchWorkspaceMode {
-        bundleIdentifier == Self.targetBundleIdentifier ? .super : .codex
+        switch WorkspaceAppProfile(bundleIdentifier: bundleIdentifier) {
+        case .super: return .super
+        case .hermes: return .hermes
+        default: return .codex
+        }
     }
 
     private func transition(to mode: StopwatchWorkspaceMode) {
         guard mode != desiredMode else {
-            if mode == .super {
-                startHeartbeatIfNeeded()
-            }
+            if mode != .codex { startHeartbeatIfNeeded() }
             return
         }
-
+        cancelCodexRetry()
         desiredMode = mode
-        sendToAll(mode)
-        if mode == .super {
-            startHeartbeatIfNeeded()
-        } else {
-            heartbeat?.cancel()
-            heartbeat = nil
+        for key in sendersByDevice.keys.sorted() {
+            if let sender = sendersByDevice[key] { synchronize(sender) }
+        }
+        if mode != .codex { startHeartbeatIfNeeded() } else { cancelHeartbeat() }
+    }
+
+    private func synchronize(_ sender: WorkspaceModeSending) {
+        let success = send(desiredMode, to: sender)
+        if desiredMode == .codex {
+            if success { remainingRetries.removeValue(forKey: sender.deviceKey) }
+            else { remainingRetries[sender.deviceKey] = 2 }
+            if remainingRetries.isEmpty { cancelCodexRetry() }
+            else { startCodexRetryIfNeeded() }
         }
     }
 
     private func startHeartbeatIfNeeded() {
         guard heartbeat == nil else { return }
+        let epoch = lifecycle, timer = heartbeatGeneration
         heartbeat = scheduler.scheduleRepeating(every: Self.heartbeatInterval) { [weak self] in
-            guard let self, self.started, self.desiredMode == .super else { return }
-            self.sendToAll(.super)
+            guard let self, self.started, self.lifecycle == epoch,
+                  self.heartbeatGeneration == timer, self.desiredMode != .codex else { return }
+            for key in self.sendersByDevice.keys.sorted() {
+                if let sender = self.sendersByDevice[key] { _ = self.send(self.desiredMode, to: sender) }
+            }
         }
     }
 
-    private func sendToAll(_ mode: StopwatchWorkspaceMode) {
-        for deviceKey in sendersByDevice.keys.sorted() {
-            guard let sender = sendersByDevice[deviceKey] else { continue }
-            send(mode, to: sender)
+    private func cancelHeartbeat() {
+        heartbeat?.cancel()
+        heartbeat = nil
+        heartbeatGeneration &+= 1
+    }
+
+    private func startCodexRetryIfNeeded() {
+        guard codexRetry == nil else { return }
+        let epoch = lifecycle, timer = retryGeneration
+        codexRetry = scheduler.scheduleRepeating(every: Self.heartbeatInterval) { [weak self] in
+            guard let self, self.started, self.lifecycle == epoch,
+                  self.retryGeneration == timer, self.desiredMode == .codex else { return }
+            for key in self.remainingRetries.keys.sorted() {
+                guard let sender = self.sendersByDevice[key],
+                      let remaining = self.remainingRetries[key] else {
+                    self.remainingRetries.removeValue(forKey: key)
+                    continue
+                }
+                if self.send(.codex, to: sender) || remaining <= 1 {
+                    self.remainingRetries.removeValue(forKey: key)
+                } else { self.remainingRetries[key] = remaining - 1 }
+            }
+            if self.remainingRetries.isEmpty { self.cancelCodexRetry() }
         }
     }
 
-    private func send(_ mode: StopwatchWorkspaceMode, to sender: WorkspaceModeSending) {
-        guard !sender.send(mode) else { return }
+    private func cancelCodexRetry() {
+        codexRetry?.cancel()
+        codexRetry = nil
+        remainingRetries.removeAll()
+        retryGeneration &+= 1
+    }
 
+    @discardableResult
+    private func send(_ mode: StopwatchWorkspaceMode, to sender: WorkspaceModeSending) -> Bool {
+        guard !sender.send(mode) else { return true }
         let now = uptime()
-        if let lastFailureLogAt,
-           now - lastFailureLogAt < Self.failureLogInterval {
-            return
+        if lastFailureLogAt.map({ now - $0 < Self.failureLogInterval }) != true {
+            lastFailureLogAt = now
+            log("StopWatch 屏幕模式同步失败；后续重试或由固件租约回退")
         }
-        lastFailureLogAt = now
-        log("StopWatch 屏幕模式同步失败；将在后续心跳重试")
+        return false
     }
 }

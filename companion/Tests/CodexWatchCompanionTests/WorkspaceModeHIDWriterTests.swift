@@ -25,6 +25,14 @@ private final class StopwatchHIDOutputDeviceStub: StopwatchHIDOutputDevice {
 
 @MainActor
 final class WorkspaceModeHIDWriterTests: XCTestCase {
+    func testHermesUsesFixedLeasePayloadAndFullReports() {
+        let device = StopwatchHIDOutputDeviceStub()
+        let writer = WorkspaceModeHIDWriter(device: device, initialRequestID: 9)
+        XCTAssertTrue(writer.send(.hermes))
+        XCTAssertEqual(String(decoding: reassembledPayload(device.writes), as: UTF8.self),
+            #"{"method":"host.workspace_mode","params":{"mode":"hermes","ttl_ms":15000},"id":9}"# + "\n")
+        XCTAssertTrue(device.writes.allSatisfy { $0.reportID == 6 && $0.bytes.count == 64 })
+    }
     func testCodexUsesFullPaddedReportID6FramesAndFixedPayload() {
         let device = StopwatchHIDOutputDeviceStub()
         let writer = WorkspaceModeHIDWriter(device: device, initialRequestID: 7)

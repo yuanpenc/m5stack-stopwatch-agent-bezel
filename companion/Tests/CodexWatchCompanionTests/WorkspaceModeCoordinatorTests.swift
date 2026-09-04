@@ -6,6 +6,7 @@ import XCTest
 private final class ForegroundObserverStub: ForegroundApplicationObserving {
     var frontmostBundleIdentifier: String?
     private var handler: (@MainActor (String?) -> Void)?
+    var delayedHandler: (@MainActor (String?) -> Void)? { handler }
     private let trace: ((String) -> Void)?
     private(set) var startCount = 0
     private(set) var stopCount = 0
@@ -52,6 +53,8 @@ private final class ScheduledTaskStub: WorkspaceModeScheduledTask {
         guard !cancelled else { return }
         handler()
     }
+
+    func fireDelayed() { handler() }
 }
 
 @MainActor
@@ -96,6 +99,77 @@ private final class WorkspaceSenderStub: WorkspaceModeSending {
 
 @MainActor
 final class WorkspaceModeCoordinatorTests: XCTestCase {
+    func testSuperToHermesChangesHeartbeatWithoutDuplicateTimer() {
+        let observer = ForegroundObserverStub(frontmostBundleIdentifier: "com.zarifpour.superconductor")
+        let scheduler = SchedulerStub()
+        let coordinator = WorkspaceModeCoordinator(foregroundObserver: observer, scheduler: scheduler, uptime: { 0 }, log: { _ in })
+        coordinator.start()
+        let sender = WorkspaceSenderStub(deviceKey: 1)
+        coordinator.attach(sender)
+        observer.activate("com.nousresearch.hermes")
+        scheduler.tasks[0].fire()
+        XCTAssertEqual(sender.modes, [.super, .hermes, .hermes])
+        XCTAssertEqual(scheduler.tasks.count, 1)
+        observer.activate("com.nousresearch.hermes.setup")
+        XCTAssertEqual(sender.modes.last, .codex)
+        XCTAssertTrue(scheduler.tasks[0].cancelled)
+    }
+
+    func testCodexFailuresRetryOnlyTwiceAndStopOnSuccessOrNewMode() {
+        let observer = ForegroundObserverStub(frontmostBundleIdentifier: "com.nousresearch.hermes")
+        let scheduler = SchedulerStub()
+        let coordinator = WorkspaceModeCoordinator(foregroundObserver: observer, scheduler: scheduler, uptime: { 0 }, log: { _ in })
+        coordinator.start()
+        let sender = WorkspaceSenderStub(deviceKey: 1)
+        coordinator.attach(sender)
+        sender.results = [false, false, false, true]
+        observer.activate("com.openai.codex")
+        let retry = scheduler.tasks.last!
+        retry.fire(); retry.fire(); retry.fireDelayed()
+        XCTAssertEqual(sender.modes, [.hermes, .codex, .codex, .codex])
+        XCTAssertTrue(retry.cancelled)
+        observer.activate("com.zarifpour.superconductor")
+        retry.fireDelayed()
+        XCTAssertEqual(sender.modes.last, .super)
+        XCTAssertEqual(sender.modes.count, 5)
+    }
+
+    func testCodexRetryTargetsFailedDevicesOnlyAndDetachCancels() {
+        let observer = ForegroundObserverStub(frontmostBundleIdentifier: nil)
+        let scheduler = SchedulerStub()
+        let coordinator = WorkspaceModeCoordinator(foregroundObserver: observer, scheduler: scheduler, uptime: { 0 }, log: { _ in })
+        coordinator.start()
+        let a = WorkspaceSenderStub(deviceKey: 1), b = WorkspaceSenderStub(deviceKey: 2)
+        a.results = [false, true]; b.results = [false, false]
+        coordinator.attach(a); coordinator.attach(b)
+        XCTAssertEqual(scheduler.tasks.count, 1)
+        scheduler.tasks[0].fire()
+        XCTAssertEqual(a.modes.count, 2)
+        coordinator.detach(deviceKey: 2)
+        scheduler.tasks[0].fireDelayed()
+        XCTAssertEqual(a.modes.count, 2)
+        XCTAssertEqual(b.modes.count, 2)
+        XCTAssertTrue(scheduler.tasks[0].cancelled)
+    }
+
+    func testOldObserverAndTimerAreNoOpsAfterStopRestart() {
+        let observer = ForegroundObserverStub(frontmostBundleIdentifier: "com.nousresearch.hermes")
+        let scheduler = SchedulerStub()
+        let coordinator = WorkspaceModeCoordinator(foregroundObserver: observer, scheduler: scheduler, uptime: { 0 }, log: { _ in })
+        coordinator.start()
+        let oldObserver = observer.delayedHandler, oldTimer = scheduler.tasks[0]
+        coordinator.stop(); coordinator.start()
+        let sender = WorkspaceSenderStub(deviceKey: 1)
+        coordinator.attach(sender)
+        oldObserver?("com.openai.codex"); oldTimer.fireDelayed()
+        XCTAssertEqual(sender.modes, [.hermes])
+        scheduler.tasks.last?.fire()
+        XCTAssertEqual(sender.modes, [.hermes, .hermes])
+        coordinator.stop()
+        let late = WorkspaceSenderStub(deviceKey: 2)
+        coordinator.attach(late)
+        XCTAssertTrue(late.modes.isEmpty)
+    }
     func testStartReadsForegroundAttachSyncsImmediatelyAndSuperHeartbeatsEveryFiveSeconds() {
         let observer = ForegroundObserverStub(
             frontmostBundleIdentifier: WorkspaceModeCoordinator.targetBundleIdentifier

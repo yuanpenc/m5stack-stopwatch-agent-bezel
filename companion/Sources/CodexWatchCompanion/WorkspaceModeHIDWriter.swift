@@ -4,6 +4,7 @@ import IOKit.hid
 enum StopwatchWorkspaceMode: Equatable {
     case codex
     case `super`
+    case hermes
 }
 
 @MainActor
@@ -67,6 +68,8 @@ final class WorkspaceModeHIDWriter: WorkspaceModeSending {
             request = #"{"method":"host.workspace_mode","params":{"mode":"codex"},"id":\#(requestID)}"# + "\n"
         case .super:
             request = #"{"method":"host.workspace_mode","params":{"mode":"super","ttl_ms":15000},"id":\#(requestID)}"# + "\n"
+        case .hermes:
+            request = #"{"method":"host.workspace_mode","params":{"mode":"hermes","ttl_ms":15000},"id":\#(requestID)}"# + "\n"
         }
 
         for report in WorkspaceModeHIDReportFramer.reports(payloadBytes: Array(request.utf8)) {
