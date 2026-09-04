@@ -17,7 +17,7 @@ protocol ProcessKeySequencePosting: AnyObject {
 @MainActor
 protocol ProcessTargetedKeyEmitting: AnyObject {
     func emit(
-        _ command: SuperEngineeringNavigationCommand,
+        _ command: WorkspaceNavigationCommand,
         to identity: ApplicationIdentity
     ) -> Bool
 }
@@ -76,23 +76,35 @@ final class SystemProcessTargetedKeyEmitter: ProcessTargetedKeyEmitting {
     }
 
     func emit(
-        _ command: SuperEngineeringNavigationCommand,
+        _ command: WorkspaceNavigationCommand,
         to identity: ApplicationIdentity
     ) -> Bool {
-        guard identity.bundleIdentifier == SuperEngineeringToggler.targetBundleIdentifier,
+        guard identity.bundleIdentifier == command.profile.bundleIdentifier,
               frontmostIdentity() == identity,
               identityForProcess(identity.processIdentifier) == identity else { return false }
 
         let keyCode: CGKeyCode
+        let flags: CGEventFlags
         switch command {
         case .previousProject:
             keyCode = CGKeyCode(kVK_UpArrow)
+            flags = [.maskControl, .maskAlternate]
         case .nextProject:
             keyCode = CGKeyCode(kVK_DownArrow)
+            flags = [.maskControl, .maskAlternate]
         case .nextTab:
             keyCode = CGKeyCode(kVK_RightArrow)
+            flags = [.maskControl, .maskAlternate]
+        case .previousHermesTab:
+            keyCode = CGKeyCode(kVK_Tab)
+            flags = [.maskControl, .maskShift]
+        case .nextHermesTab:
+            keyCode = CGKeyCode(kVK_Tab)
+            flags = [.maskControl]
+        case .newHermesTab:
+            keyCode = CGKeyCode(kVK_ANSI_T)
+            flags = [.maskCommand]
         }
-        let flags: CGEventFlags = [.maskControl, .maskAlternate]
         return poster.post(
             [
                 ProcessKeyStroke(keyCode: keyCode, keyDown: true, flags: flags),

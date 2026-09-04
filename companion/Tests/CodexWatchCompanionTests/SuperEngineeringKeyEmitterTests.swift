@@ -28,7 +28,7 @@ final class SuperEngineeringKeyEmitterTests: XCTestCase {
     private let modifiers: CGEventFlags = [.maskControl, .maskAlternate]
 
     func testCommandsProduceFixedArrowDownUpPairsForExactPID() {
-        let cases: [(SuperEngineeringNavigationCommand, CGKeyCode)] = [
+        let cases: [(WorkspaceNavigationCommand, CGKeyCode)] = [
             (.previousProject, CGKeyCode(kVK_UpArrow)),
             (.nextProject, CGKeyCode(kVK_DownArrow)),
             (.nextTab, CGKeyCode(kVK_RightArrow)),
@@ -53,6 +53,30 @@ final class SuperEngineeringKeyEmitterTests: XCTestCase {
                 ),
             ])
         }
+    }
+
+    func testHermesUsesTabAndTWithFixedModifiersAndRejectsCrossAppCommands() {
+        let hermes = ApplicationIdentity(processIdentifier: 303, bundleIdentifier: "com.nousresearch.hermes")
+        let cases: [(WorkspaceNavigationCommand, CGKeyCode, CGEventFlags)] = [
+            (.previousHermesTab, 48, [.maskControl, .maskShift]),
+            (.nextHermesTab, 48, [.maskControl]),
+            (.newHermesTab, 17, [.maskCommand]),
+        ]
+        for (command, key, flags) in cases {
+            let poster = SequencePosterStub()
+            let emitter = SystemProcessTargetedKeyEmitter(frontmostIdentity: { hermes }, identityForProcess: { _ in hermes }, poster: poster)
+            XCTAssertTrue(emitter.emit(command, to: hermes))
+            XCTAssertEqual(poster.deliveries, [.init(strokes: [
+                ProcessKeyStroke(keyCode: key, keyDown: true, flags: flags),
+                ProcessKeyStroke(keyCode: key, keyDown: false, flags: flags)
+            ], processIdentifier: 303)])
+            XCTAssertFalse(emitter.emit(.nextProject, to: hermes))
+            XCTAssertEqual(poster.deliveries.count, 1)
+        }
+        let poster = SequencePosterStub()
+        let emitter = SystemProcessTargetedKeyEmitter(frontmostIdentity: { self.target }, identityForProcess: { _ in self.target }, poster: poster)
+        XCTAssertFalse(emitter.emit(.newHermesTab, to: target))
+        XCTAssertTrue(poster.deliveries.isEmpty)
     }
 
     func testExitedTargetPostsNothing() {

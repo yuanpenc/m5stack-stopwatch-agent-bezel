@@ -112,10 +112,10 @@ final class HIDShortcutDecoderTests: XCTestCase {
 
     func testFourPhysicalAnglesProduceTypedEvents() {
         let cases: [(Double, CompanionShortcutEvent)] = [
-            (0.00, .navigateSuperEngineering(.nextTab)),
-            (0.25, .navigateSuperEngineering(.nextProject)),
-            (0.50, .toggleSuperEngineering),
-            (0.75, .navigateSuperEngineering(.previousProject)),
+            (0.00, .right),
+            (0.25, .down),
+            (0.50, .left),
+            (0.75, .up),
         ]
 
         for (angle, expected) in cases {
@@ -138,7 +138,7 @@ final class HIDShortcutDecoderTests: XCTestCase {
     func testFragmentedLeftPressProducesOneToggle() {
         var decoder = HIDShortcutDecoder()
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(#"{"method":"v.oai."#), now: 10), [])
-        XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(#"rad","params":{"a":0.5,"d":1.0}}"# + "\n"), now: 10.01), [.toggleSuperEngineering])
+        XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(#"rad","params":{"a":0.5,"d":1.0}}"# + "\n"), now: 10.01), [.left])
     }
 
     func testRawMacOSCallbackIncludingReportIDProducesToggle() {
@@ -148,7 +148,7 @@ final class HIDShortcutDecoderTests: XCTestCase {
 
         XCTAssertEqual(
             decoder.consume(reportID: 6, bytes: rawReport, now: 10),
-            [.toggleSuperEngineering]
+            [.left]
         )
     }
 
@@ -156,19 +156,19 @@ final class HIDShortcutDecoderTests: XCTestCase {
         var decoder = HIDShortcutDecoder()
         let press = report(#"{"method":"v.oai.rad","params":{"a":0.5,"d":1.0}}"# + "\n")
         let release = report(#"{"method":"v.oai.rad","params":{"a":0.5,"d":0.0}}"# + "\n")
-        XCTAssertEqual(decoder.consume(reportID: 6, bytes: press, now: 1), [.toggleSuperEngineering])
+        XCTAssertEqual(decoder.consume(reportID: 6, bytes: press, now: 1), [.left])
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: press, now: 1.1), [])
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: release, now: 1.2), [])
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: press, now: 1.3), [])
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: release, now: 1.4), [])
-        XCTAssertEqual(decoder.consume(reportID: 6, bytes: press, now: 1.81), [.toggleSuperEngineering])
+        XCTAssertEqual(decoder.consume(reportID: 6, bytes: press, now: 1.81), [.left])
     }
 
     func testPressRejectedByCooldownStillRequiresReleaseBeforeAnotherDirectionCanFire() {
         var decoder = HIDShortcutDecoder()
         XCTAssertEqual(
             decoder.consume(reportID: 6, bytes: radial(angle: 0, distance: 1), now: 1),
-            [.navigateSuperEngineering(.nextTab)]
+            [.right]
         )
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: radial(angle: 0, distance: 0), now: 1.1), [])
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: radial(angle: 0.75, distance: 1), now: 1.2), [])
@@ -176,7 +176,7 @@ final class HIDShortcutDecoderTests: XCTestCase {
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: radial(angle: 0.75, distance: 0), now: 2.2), [])
         XCTAssertEqual(
             decoder.consume(reportID: 6, bytes: radial(angle: 0.25, distance: 1), now: 2.3),
-            [.navigateSuperEngineering(.nextProject)]
+            [.down]
         )
     }
 
@@ -185,7 +185,7 @@ final class HIDShortcutDecoderTests: XCTestCase {
         _ = decoder.consume(reportID: 6, bytes: report(#"{"method":"v.oai."#), now: 1)
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: [0x02, 60, 0x7B], now: 1.1), [])
         let valid = report(#"{"method":"v.oai.rad","params":{"a":0.5,"d":1.0}}"# + "\n")
-        XCTAssertEqual(decoder.consume(reportID: 6, bytes: valid, now: 2), [.toggleSuperEngineering])
+        XCTAssertEqual(decoder.consume(reportID: 6, bytes: valid, now: 2), [.left])
     }
 
     func testWrongReportMethodDirectionAndNonFiniteValuesAreIgnored() {
@@ -201,7 +201,7 @@ final class HIDShortcutDecoderTests: XCTestCase {
         var decoder = HIDShortcutDecoder()
         XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(#"{"method":"v.oai."#), now: 1), [])
         XCTAssertEqual(decoder.consume(reportID: 5, bytes: [0x00], now: 1.1), [])
-        XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(#"rad","params":{"a":0.5,"d":1.0}}"# + "\n"), now: 1.2), [.toggleSuperEngineering])
+        XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(#"rad","params":{"a":0.5,"d":1.0}}"# + "\n"), now: 1.2), [.left])
     }
 
     func testDescriptorConstantsMatchPhysicalProbe() {
@@ -218,12 +218,12 @@ final class HIDShortcutDecoderTests: XCTestCase {
             XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(String(repeating: "x", count: 61)), now: TimeInterval(index)), [])
         }
         let valid = report(#"{"method":"v.oai.rad","params":{"a":0.5,"d":1.0}}"# + "\n")
-        XCTAssertEqual(decoder.consume(reportID: 6, bytes: valid, now: 100), [.toggleSuperEngineering])
+        XCTAssertEqual(decoder.consume(reportID: 6, bytes: valid, now: 100), [.left])
     }
 
     func testConsumesEveryNewlineInOneFragment() {
         var decoder = HIDShortcutDecoder()
         let payload = "{}\n" + #"{"method":"v.oai.rad","params":{"a":0.5,"d":1.0}}"# + "\n"
-        XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(payload), now: 1), [.toggleSuperEngineering])
+        XCTAssertEqual(decoder.consume(reportID: 6, bytes: report(payload), now: 1), [.left])
     }
 }

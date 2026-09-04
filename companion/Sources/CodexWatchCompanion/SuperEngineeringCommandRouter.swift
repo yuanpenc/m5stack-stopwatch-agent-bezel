@@ -12,9 +12,9 @@ struct SystemAccessibilityTrustChecker: AccessibilityTrustChecking {
 }
 
 @MainActor
-final class SuperEngineeringCommandRouter {
+final class WorkspaceCommandRouter {
     private let workspace: WorkspaceApplications
-    private let toggler: SuperEngineeringToggling
+    private let toggler: WorkspaceCycling
     private let emitter: ProcessTargetedKeyEmitting
     private let accessibility: AccessibilityTrustChecking
     private let log: (String) -> Void
@@ -22,7 +22,7 @@ final class SuperEngineeringCommandRouter {
 
     init(
         workspace: WorkspaceApplications,
-        toggler: SuperEngineeringToggling,
+        toggler: WorkspaceCycling,
         emitter: ProcessTargetedKeyEmitting,
         accessibility: AccessibilityTrustChecking,
         log: @escaping (String) -> Void
@@ -36,17 +36,18 @@ final class SuperEngineeringCommandRouter {
 
     func handle(_ event: CompanionShortcutEvent) {
         switch event {
-        case .toggleSuperEngineering:
-            toggler.toggle()
-        case .navigateSuperEngineering(let command):
+        case .left:
+            toggler.cycle()
+        case .up, .down, .right:
             guard let target = workspace.frontmost,
-                  target.bundleIdentifier == SuperEngineeringToggler.targetBundleIdentifier else {
+                  let profile = WorkspaceAppProfile(bundleIdentifier: target.bundleIdentifier),
+                  let command = profile.command(for: event) else {
                 return
             }
             guard accessibility.isTrusted else {
                 if !didWarnAboutAccessibility {
                     didWarnAboutAccessibility = true
-                    log("辅助功能权限未开启；super.engineering 项目和会话导航不可用")
+                    log("辅助功能权限未开启；super.engineering / Hermes 导航不可用")
                 }
                 return
             }

@@ -2,10 +2,10 @@ import XCTest
 @testable import CodexWatchCompanion
 
 @MainActor
-private final class TogglerSpy: SuperEngineeringToggling {
+private final class TogglerSpy: WorkspaceCycling {
     var toggleCount = 0
 
-    func toggle() {
+    func cycle() {
         toggleCount += 1
     }
 }
@@ -13,7 +13,7 @@ private final class TogglerSpy: SuperEngineeringToggling {
 @MainActor
 private final class EmitterSpy: ProcessTargetedKeyEmitting {
     struct Call: Equatable {
-        let command: SuperEngineeringNavigationCommand
+        let command: WorkspaceNavigationCommand
         let identity: ApplicationIdentity
     }
 
@@ -21,7 +21,7 @@ private final class EmitterSpy: ProcessTargetedKeyEmitting {
     var result = true
 
     func emit(
-        _ command: SuperEngineeringNavigationCommand,
+        _ command: WorkspaceNavigationCommand,
         to identity: ApplicationIdentity
     ) -> Bool {
         calls.append(Call(command: command, identity: identity))
@@ -38,17 +38,28 @@ private final class RouterLogRecorder {
 }
 
 @MainActor
-final class SuperEngineeringCommandRouterTests: XCTestCase {
+final class WorkspaceCommandRouterTests: XCTestCase {
     private let chatGPT = ApplicationIdentity(processIdentifier: 101, bundleIdentifier: "com.openai.chat")
     private let superApp = ApplicationIdentity(
         processIdentifier: 202,
         bundleIdentifier: "com.zarifpour.superconductor"
     )
 
+    func testHermesNavigationUsesOnlyExactForegroundTarget() {
+        let hermes = ApplicationIdentity(processIdentifier: 303, bundleIdentifier: "com.nousresearch.hermes")
+        let fixture = makeFixture(frontmost: hermes, trusted: true)
+        fixture.router.handle(.up); fixture.router.handle(.down); fixture.router.handle(.right)
+        XCTAssertEqual(fixture.emitter.calls, [
+            .init(command: .previousHermesTab, identity: hermes),
+            .init(command: .nextHermesTab, identity: hermes),
+            .init(command: .newHermesTab, identity: hermes),
+        ])
+    }
+
     func testLeftAlwaysReachesTogglerWithoutAccessibility() {
         let fixture = makeFixture(frontmost: chatGPT, trusted: false)
 
-        fixture.router.handle(.toggleSuperEngineering)
+        fixture.router.handle(.left)
 
         XCTAssertEqual(fixture.toggler.toggleCount, 1)
         XCTAssertTrue(fixture.emitter.calls.isEmpty)
@@ -58,7 +69,7 @@ final class SuperEngineeringCommandRouterTests: XCTestCase {
     func testNavigationIsSilentOutsideForegroundSuperEngineering() {
         let fixture = makeFixture(frontmost: chatGPT, trusted: true)
 
-        fixture.router.handle(.navigateSuperEngineering(.nextProject))
+        fixture.router.handle(.down)
 
         XCTAssertEqual(fixture.toggler.toggleCount, 0)
         XCTAssertTrue(fixture.emitter.calls.isEmpty)
@@ -68,9 +79,9 @@ final class SuperEngineeringCommandRouterTests: XCTestCase {
     func testNavigationUsesExactForegroundIdentityForEveryCommand() {
         let fixture = makeFixture(frontmost: superApp, trusted: true)
 
-        fixture.router.handle(.navigateSuperEngineering(.previousProject))
-        fixture.router.handle(.navigateSuperEngineering(.nextProject))
-        fixture.router.handle(.navigateSuperEngineering(.nextTab))
+        fixture.router.handle(.up)
+        fixture.router.handle(.down)
+        fixture.router.handle(.right)
 
         XCTAssertEqual(fixture.emitter.calls, [
             .init(command: .previousProject, identity: superApp),
@@ -83,9 +94,9 @@ final class SuperEngineeringCommandRouterTests: XCTestCase {
     func testAccessibilityWarningOccursOnceAndLeftStillWorks() {
         let fixture = makeFixture(frontmost: superApp, trusted: false)
 
-        fixture.router.handle(.navigateSuperEngineering(.previousProject))
-        fixture.router.handle(.navigateSuperEngineering(.nextProject))
-        fixture.router.handle(.toggleSuperEngineering)
+        fixture.router.handle(.up)
+        fixture.router.handle(.down)
+        fixture.router.handle(.left)
 
         XCTAssertTrue(fixture.emitter.calls.isEmpty)
         XCTAssertEqual(fixture.toggler.toggleCount, 1)
@@ -96,7 +107,7 @@ final class SuperEngineeringCommandRouterTests: XCTestCase {
         let fixture = makeFixture(frontmost: superApp, trusted: true)
         fixture.emitter.result = false
 
-        fixture.router.handle(.navigateSuperEngineering(.nextTab))
+        fixture.router.handle(.right)
 
         XCTAssertEqual(fixture.emitter.calls, [.init(command: .nextTab, identity: superApp)])
         XCTAssertEqual(fixture.toggler.toggleCount, 0)
@@ -107,7 +118,7 @@ final class SuperEngineeringCommandRouterTests: XCTestCase {
         frontmost: ApplicationIdentity,
         trusted: Bool
     ) -> (
-        router: SuperEngineeringCommandRouter,
+        router: WorkspaceCommandRouter,
         toggler: TogglerSpy,
         emitter: EmitterSpy,
         logs: RouterLogRecorder
@@ -117,7 +128,7 @@ final class SuperEngineeringCommandRouterTests: XCTestCase {
         let toggler = TogglerSpy()
         let emitter = EmitterSpy()
         let logs = RouterLogRecorder()
-        let router = SuperEngineeringCommandRouter(
+        let router = WorkspaceCommandRouter(
             workspace: workspace,
             toggler: toggler,
             emitter: emitter,

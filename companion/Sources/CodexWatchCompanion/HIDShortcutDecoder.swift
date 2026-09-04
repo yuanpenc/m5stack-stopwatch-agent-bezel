@@ -1,14 +1,7 @@
 import Foundation
 
-enum SuperEngineeringNavigationCommand: Equatable {
-    case previousProject
-    case nextProject
-    case nextTab
-}
-
 enum CompanionShortcutEvent: Equatable {
-    case toggleSuperEngineering
-    case navigateSuperEngineering(SuperEngineeringNavigationCommand)
+    case left, up, down, right
 }
 
 enum StopwatchHIDDescriptor {
@@ -98,10 +91,10 @@ struct HIDShortcutDecoder {
 
     private func event(for angle: Double) -> CompanionShortcutEvent? {
         let candidates: [(Double, CompanionShortcutEvent)] = [
-            (0.00, .navigateSuperEngineering(.nextTab)),
-            (0.25, .navigateSuperEngineering(.nextProject)),
-            (0.50, .toggleSuperEngineering),
-            (0.75, .navigateSuperEngineering(.previousProject)),
+            (0.00, .right),
+            (0.25, .down),
+            (0.50, .left),
+            (0.75, .up),
         ]
         return candidates.first { abs(angle - $0.0) <= Self.directionTolerance }?.1
     }

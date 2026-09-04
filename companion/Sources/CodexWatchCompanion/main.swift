@@ -646,17 +646,20 @@ private func run() throws {
         throw CompanionError.usage("写入真实额度必须提供 --device-id；先运行 --demo --verbose 查看 StopWatch UUID")
     }
 
-    var shortcutRouter: SuperEngineeringCommandRouter?
+    var workspaceCycleController: WorkspaceCycleController?
+    var shortcutRouter: WorkspaceCommandRouter?
     var shortcutListener: HIDShortcutListener?
     var workspaceModeCoordinator: WorkspaceModeCoordinator?
     if options.startsHIDShortcutListener,
        options.startsWorkspaceModeCoordinator {
         let workspace = NSWorkspaceApplications()
-        let toggler = SuperEngineeringToggler(
+        let toggler = WorkspaceCycleController(
             workspace: workspace,
+            observer: SystemForegroundApplicationObserver(),
+            scheduler: SystemWorkspaceModeScheduler(),
             log: { fputs("快捷键：\($0)\n", stderr) }
         )
-        let router = SuperEngineeringCommandRouter(
+        let router = WorkspaceCommandRouter(
             workspace: workspace,
             toggler: toggler,
             emitter: SystemProcessTargetedKeyEmitter(),
@@ -667,6 +670,7 @@ private func run() throws {
             log: { fputs("屏幕：\($0)\n", stderr) }
         )
         coordinator.start()
+        toggler.start()
         let listener = HIDShortcutListener(
             eventHandler: { [weak router] event in router?.handle(event) },
             log: { fputs("快捷键：\($0)\n", stderr) },
@@ -679,15 +683,19 @@ private func run() throws {
         )
         do {
             try listener.start()
+            workspaceCycleController = toggler
             shortcutRouter = router
             shortcutListener = listener
             workspaceModeCoordinator = coordinator
         } catch {
+            toggler.stop()
             coordinator.stop()
             fputs("快捷键不可用：\(error.localizedDescription)\n", stderr)
         }
     }
     defer {
+        workspaceCycleController?.stop()
+        workspaceCycleController = nil
         workspaceModeCoordinator?.stop()
         withExtendedLifetime(shortcutRouter) {
             shortcutListener?.stop()
