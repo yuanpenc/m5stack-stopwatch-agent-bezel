@@ -28,7 +28,18 @@ dashboard::State previewState(const char* scenario) {
       {0x000000, 0.00f, false},  // unassigned
   }};
 
-  if (std::strcmp(scenario, "ble") == 0) {
+  if (std::strcmp(scenario, "live-battery-0") == 0) {
+    state.batteryPercent = 0;
+  } else if (std::strcmp(scenario, "live-battery-9") == 0) {
+    state.batteryPercent = 9;
+  } else if (std::strcmp(scenario, "live-battery-100") == 0) {
+    state.batteryPercent = 100;
+  } else if (std::strcmp(scenario, "live-unknown-battery") == 0) {
+    state.batteryPercent = -1;
+  } else if (std::strcmp(scenario, "live-charging") == 0) {
+    state.charging = true;
+    state.docked = true;
+  } else if (std::strcmp(scenario, "ble") == 0) {
     state.linkHealth = dashboard::LinkHealth::BleOnly;
     state.batteryPercent = 61;
     state.charging = true;
@@ -63,7 +74,13 @@ super_workspace::State superPreviewState(const char* scenario) {
   const bool hermes = std::strncmp(scenario, "hermes", 6) == 0;
   if (hermes) state.profile = super_workspace::Profile::Hermes;
   const char* suffix = scenario + (hermes ? 6 : 5);
-  if (std::strcmp(suffix, "-active-right") == 0) {
+  if (std::strcmp(suffix, "-battery-0") == 0) {
+    state.batteryPercent = 0;
+  } else if (std::strcmp(suffix, "-battery-9") == 0) {
+    state.batteryPercent = 9;
+  } else if (std::strcmp(suffix, "-battery-100") == 0) {
+    state.batteryPercent = 100;
+  } else if (std::strcmp(suffix, "-active-right") == 0) {
     state.swipeDirection = touch_gesture::Direction::Right;
   } else if (std::strcmp(suffix, "-active-up") == 0) {
     state.swipeDirection = touch_gesture::Direction::Up;
@@ -97,11 +114,17 @@ bool validScenario(const char* scenario) {
     const char* suffix = scenario + (hermes ? 6 : 5);
     for (const auto* known : {"", "-active-up", "-active-right", "-active-down",
                               "-active-left", "-offline", "-charging",
-                              "-power-hold", "-unknown-battery", "-colors"})
+                              "-power-hold", "-unknown-battery", "-colors",
+                              "-battery-0", "-battery-9", "-battery-100"})
       if (std::strcmp(suffix, known) == 0) return true;
     return false;
   }
   return std::strcmp(scenario, "live") == 0 ||
+         std::strcmp(scenario, "live-battery-0") == 0 ||
+         std::strcmp(scenario, "live-battery-9") == 0 ||
+         std::strcmp(scenario, "live-battery-100") == 0 ||
+         std::strcmp(scenario, "live-unknown-battery") == 0 ||
+         std::strcmp(scenario, "live-charging") == 0 ||
          std::strcmp(scenario, "ble") == 0 ||
          std::strcmp(scenario, "live-stale") == 0 ||
          std::strcmp(scenario, "offline") == 0 ||
@@ -136,8 +159,10 @@ int main(int argc, char** argv) {
   if (!validScenario(scenario)) {
     std::fprintf(stderr,
                  "Unknown scenario '%s' (use live, ble, live-stale, offline, "
-                 "super, super-active-right, super-offline, super-charging, "
-                 "super-power-hold, power-hold, or power-off)\n",
+                 "power-hold, power-off; super/hermes with optional "
+                 "-active-up/-right/-down/-left, -offline, -charging, "
+                 "-power-hold, -unknown-battery, -colors, -battery-0/-9/-100; "
+                 "live also accepts -charging, -unknown-battery, -battery-0/-9/-100)\n",
                  scenario);
     return 2;
   }
