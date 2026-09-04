@@ -2,7 +2,7 @@
 
 ## 状态与范围
 
-- 状态：交互原型已获用户批准；本书面规格待审阅，尚未实施。
+- 状态：Approved。用户确认开始代码实现；按本规格串行实施，硬件验收另行进行。
 - 基线：`3c955f3`，开发分支 `feature/hermes-desktop-workspace`。
 - 目标：USB 麦克风版 M5Stack StopWatch C152；保留现有 Codex Micro 面板与 SUPER 功能，增加 Hermes Desktop。
 - 方式：当前会话串行实施，不使用子 Agent。设计审阅后编写逐任务 TDD 实施计划。
