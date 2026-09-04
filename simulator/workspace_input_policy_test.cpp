@@ -5,6 +5,13 @@
 int main() {
   using workspace_input::Control;
   using workspace_mode::Mode;
+  assert(!workspace_mode::isDirectional(Mode::Codex));
+  assert(workspace_mode::isDirectional(Mode::Super));
+  assert(workspace_mode::isDirectional(Mode::Hermes));
+  for (auto from : {Mode::Codex, Mode::Super, Mode::Hermes})
+    for (auto to : {Mode::Codex, Mode::Super, Mode::Hermes})
+      assert(workspace_mode::silencesAgentTransitions(from, to) ==
+             (from != Mode::Codex || to != Mode::Codex));
 
   constexpr Control allControls[] = {
       Control::SwipeUp,

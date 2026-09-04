@@ -13,6 +13,14 @@ constexpr std::uint32_t kLeaseMs = 15000;
 enum class Mode : std::uint8_t { Codex, Super, Hermes };
 enum class Command : std::uint8_t { Invalid, Codex, Super, Hermes };
 
+constexpr bool isDirectional(Mode mode) {
+  return mode == Mode::Super || mode == Mode::Hermes;
+}
+
+constexpr bool silencesAgentTransitions(Mode previous, Mode next) {
+  return isDirectional(previous) || isDirectional(next);
+}
+
 inline Command parse(JsonObjectConst params) {
   const JsonVariantConst modeValue = params["mode"];
   if (!modeValue.is<const char*>()) return Command::Invalid;

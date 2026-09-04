@@ -17,6 +17,7 @@
 #include "TouchGesture.h"
 #if defined(CODEX_STOPWATCH_USB_MIC)
 #include "SuperWorkspaceUi.h"
+#include <esp_system.h>
 #include "UsbMic.h"
 #include "WorkspaceInputPolicy.h"
 #endif
@@ -143,6 +144,7 @@ bool renderedDocked = false;
 bool renderedWorkspaceModeValid = false;
 workspace_mode::Mode renderedWorkspaceMode = workspace_mode::Mode::Codex;
 bool renderedConnected = false;
+workspace_palette::Palette workspacePalette;
 #endif
 
 void drawScreen();
@@ -421,8 +423,8 @@ float currentPowerHoldProgress() {
 }
 
 #if defined(CODEX_STOPWATCH_USB_MIC)
-bool superWorkspaceActive() {
-  return state.workspaceMode == workspace_mode::Mode::Super;
+bool directionalWorkspaceActive() {
+  return workspace_mode::isDirectional(state.workspaceMode);
 }
 
 workspace_input::Control controlForSwipe(
@@ -456,6 +458,9 @@ super_workspace::PowerOverlay superPowerOverlay() {
 
 super_workspace::State superWorkspaceState() {
   super_workspace::State ui;
+  ui.profile = state.workspaceMode == workspace_mode::Mode::Hermes
+                   ? super_workspace::Profile::Hermes : super_workspace::Profile::Super;
+  ui.borderColors = workspacePalette.colors();
   ui.batteryPercent = batteryPercent;
   ui.charging = charging;
   ui.connected = state.connected;
@@ -493,7 +498,7 @@ dashboard::State dashboardState() {
 void drawScreen() {
   if (deskSleeping) return;
 #if defined(CODEX_STOPWATCH_USB_MIC)
-  if (superWorkspaceActive()) {
+  if (directionalWorkspaceActive()) {
     super_workspace::render(canvas, superWorkspaceState());
     renderedHealthValid = false;
     renderedWorkspaceModeValid = true;
@@ -591,7 +596,7 @@ void beginTouchGesture(int x, int y) {
   Serial.printf("TOUCH begin x=%d y=%d agent=%d send=%d\n", x, y, agent,
                 dashboard::sendAtPoint(x, y) ? 1 : 0);
 #if defined(CODEX_STOPWATCH_USB_MIC)
-  if (superWorkspaceActive()) {
+  if (directionalWorkspaceActive()) {
     if (dashboard::sendAtPoint(x, y) && workspace_input::allowed(
             state.workspaceMode,
             workspace_input::Control::CenterPowerHold)) {
@@ -624,6 +629,9 @@ void updateTouchGesture(int x, int y) {
 
   clearTouchCandidate();
   activeSwipe = direction;
+#if defined(CODEX_STOPWATCH_USB_MIC)
+  workspacePalette.acceptSwipe(millis(), [] { return esp_random(); });
+#endif
   const float angle = touch_gesture::normalizedAngle(direction);
   codex.sendJoystick(angle, 1.0f);
   startHaptic(kSwipeHapticIntensity, kSwipeHapticDurationMs);
@@ -657,7 +665,7 @@ void finishTouchGesture() {
   }
 
 #if defined(CODEX_STOPWATCH_USB_MIC)
-  if (superWorkspaceActive()) {
+  if (directionalWorkspaceActive()) {
     clearTouchCandidate();
     return;
   }
@@ -864,6 +872,7 @@ void handleWorkspaceModeTransition(workspace_mode::Mode previous,
   clearTouchCandidate();
   stopHaptic();
   Serial.printf("WORKSPACE mode=%s\n",
+                next == workspace_mode::Mode::Hermes ? "hermes" :
                 next == workspace_mode::Mode::Super ? "super" : "codex");
 }
 #endif
@@ -1079,8 +1088,8 @@ void loop() {
   handleWorkspaceModeTransition(previousWorkspaceMode, latest.workspaceMode);
   state = latest;
   if (shouldRedraw) {
-    if (state.workspaceMode == workspace_mode::Mode::Super ||
-        previousWorkspaceMode == workspace_mode::Mode::Super) {
+    if (workspace_mode::silencesAgentTransitions(previousWorkspaceMode,
+                                                 state.workspaceMode)) {
       synchronizeAgentStatusBaseline(state);
     } else {
       detectAgentTransitions(state);
@@ -1193,7 +1202,7 @@ void loop() {
 
   bool derivedStateChanged = false;
 #if defined(CODEX_STOPWATCH_USB_MIC)
-  if (superWorkspaceActive()) {
+  if (directionalWorkspaceActive()) {
     derivedStateChanged =
         !renderedWorkspaceModeValid ||
         renderedWorkspaceMode != state.workspaceMode ||
@@ -1218,7 +1227,7 @@ void loop() {
 
   if (appliedBrightness > 0 &&
 #if defined(CODEX_STOPWATCH_USB_MIC)
-      !superWorkspaceActive() &&
+      !directionalWorkspaceActive() &&
 #endif
       state.quota.available &&
       millis() - lastDrawMs > 30000) {
