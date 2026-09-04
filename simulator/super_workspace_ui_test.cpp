@@ -82,7 +82,8 @@ void testSharedRendererDoesNotCoverTriangleBases() {
   auto contains = [&](const char* text) {
     return std::find(surface.texts.begin(), surface.texts.end(), text) != surface.texts.end();
   };
-  assert(contains("HERMES") && contains("NEW") && contains("CYCLE"));
+  assert(contains("HERMES") && contains("OPEN") && contains("CYCLE"));
+  assert(!contains("NEW") && !contains("PROJECT"));
   assert(contains("OFFLINE") && contains("--%"));
   assert(!contains("BACK") && !contains("TAB"));
 }

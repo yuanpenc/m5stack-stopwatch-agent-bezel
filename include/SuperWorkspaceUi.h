@@ -252,7 +252,7 @@ void render(Surface& surface, const State& state) {
     const auto& control = kDirectionalControls[i];
     const char* label = state.profile == Profile::Hermes &&
                         control.direction == touch_gesture::Direction::Right
-                            ? "NEW" : control.label;
+                            ? "OPEN" : control.label;
     drawDirectionalControl(surface, control,
                            state.swipeDirection == control.direction,
                            state.borderColors[i], label);
