@@ -20,6 +20,8 @@ int main() {
   };
   for (Control control : allControls) {
     assert(workspace_input::allowed(Mode::Codex, control));
+    assert(workspace_input::allowed(Mode::Hermes, control) ==
+           workspace_input::allowed(Mode::Super, control));
   }
 
   assert(workspace_input::allowed(Mode::Super, Control::SwipeUp));

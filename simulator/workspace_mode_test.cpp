@@ -17,6 +17,42 @@ workspace_mode::Command parseParams(const char* json) {
   return workspace_mode::parse(document.as<JsonObjectConst>());
 }
 
+void testHermesLeaseAndStrictParameters() {
+  using namespace workspace_mode;
+  const auto hermes = parseParams(R"({"mode":"hermes","ttl_ms":15000})");
+  assert(hermes != Command::Invalid);
+  const char* invalid[] = {
+      R"({"mode":"hermes"})", R"({"mode":"hermes","ttl_ms":true})",
+      R"({"mode":"hermes","ttl_ms":15000.0})",
+      R"({"mode":"hermes","ttl_ms":-1})",
+      R"({"mode":"hermes","ttl_ms":4294967296})",
+      R"({"mode":"hermes","ttl_ms":"15000"})",
+      R"({"mode":"hermes","ttl_ms":14999})",
+      R"({"mode":"hermes","ttl_ms":15000,"extra":1})"};
+  for (const auto* json : invalid) assert(parseParams(json) == Command::Invalid);
+  Lease lease;
+  assert(lease.apply(Command::Super, 7, 0));
+  assert(!lease.apply(hermes, 8, 1));
+  assert(lease.mode() == Mode::Super);
+  assert(lease.apply(hermes, 7, 100));
+  assert(lease.mode() != Mode::Super && lease.mode() != Mode::Codex);
+  assert(!lease.apply(Command::Super, 8, 1000));
+  assert(!lease.apply(hermes, 7, 2000));
+  assert(!lease.disconnect(8));
+  assert(!lease.expire(16999));
+  assert(lease.expire(17000));
+  assert(lease.apply(hermes, 8, 18000));
+  assert(lease.apply(Command::Super, 8, 18001));
+  assert(lease.apply(hermes, 8, 18002));
+  assert(lease.apply(Command::Codex, 9, 18003));
+  assert(lease.apply(hermes, 8, 18004));
+  assert(lease.disconnect(8));
+  const auto start = std::numeric_limits<std::uint32_t>::max() - 9999;
+  assert(lease.apply(hermes, 8, start));
+  assert(!lease.expire(4999));
+  assert(lease.expire(5000));
+}
+
 void testStrictParsing() {
   using workspace_mode::Command;
 
@@ -122,6 +158,7 @@ void testMillisRollover() {
 }  // namespace
 
 int main() {
+  testHermesLeaseAndStrictParameters();
   testStrictParsing();
   testOwnershipAndRefresh();
   testDisconnectAndExpiryBoundary();

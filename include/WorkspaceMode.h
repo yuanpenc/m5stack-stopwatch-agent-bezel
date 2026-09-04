@@ -10,8 +10,8 @@ namespace workspace_mode {
 
 constexpr std::uint32_t kLeaseMs = 15000;
 
-enum class Mode : std::uint8_t { Codex, Super };
-enum class Command : std::uint8_t { Invalid, Codex, Super };
+enum class Mode : std::uint8_t { Codex, Super, Hermes };
+enum class Command : std::uint8_t { Invalid, Codex, Super, Hermes };
 
 inline Command parse(JsonObjectConst params) {
   const JsonVariantConst modeValue = params["mode"];
@@ -21,7 +21,9 @@ inline Command parse(JsonObjectConst params) {
   if (std::strcmp(mode, "codex") == 0) {
     return params.size() == 1 ? Command::Codex : Command::Invalid;
   }
-  if (std::strcmp(mode, "super") != 0 || params.size() != 2) {
+  const bool super = std::strcmp(mode, "super") == 0;
+  const bool hermes = std::strcmp(mode, "hermes") == 0;
+  if ((!super && !hermes) || params.size() != 2) {
     return Command::Invalid;
   }
 
@@ -29,7 +31,7 @@ inline Command parse(JsonObjectConst params) {
   if (!ttl.is<JsonInteger>() || ttl.as<JsonInteger>() != kLeaseMs) {
     return Command::Invalid;
   }
-  return Command::Super;
+  return super ? Command::Super : Command::Hermes;
 }
 
 class Lease {
@@ -39,13 +41,14 @@ class Lease {
     if (command == Command::Invalid) return false;
     if (command == Command::Codex) return clear();
 
-    if (mode_ == Mode::Super &&
+    if (mode_ != Mode::Codex &&
         (!ownerValid_ || ownerConnectionId_ != connectionId)) {
       return false;
     }
 
-    const bool changed = mode_ != Mode::Super;
-    mode_ = Mode::Super;
+    const Mode requested = command == Command::Super ? Mode::Super : Mode::Hermes;
+    const bool changed = mode_ != requested;
+    mode_ = requested;
     ownerConnectionId_ = connectionId;
     ownerValid_ = true;
     refreshedAtMs_ = nowMs;
@@ -58,7 +61,7 @@ class Lease {
   }
 
   bool expire(std::uint32_t nowMs) {
-    if (mode_ != Mode::Super ||
+    if (mode_ == Mode::Codex ||
         static_cast<std::uint32_t>(nowMs - refreshedAtMs_) < kLeaseMs) {
       return false;
     }
