@@ -292,20 +292,20 @@ void drawDialShapes(Surface& surface, const State& state) {
 template <typename Surface>
 void drawSmallText(Surface& surface, const State& state) {
   surface.loadFont(font_data::kSpaceMono18Vlw);
+  const bool diagnostic = state.quotaStale || state.linkHealth == LinkHealth::Offline;
 
   // The health word is the status light: color and copy distinguish a live
   // Codex session from a bare BLE link, a stale companion, and no link at all.
   // Keeping it inside the dial leaves the six edge keys at their full size.
   centered(surface, linkHealthLabel(state.linkHealth), kCenterX,
-           kQuotaCenterY - 69, linkHealthColor(surface, state.linkHealth));
+           diagnostic ? kQuotaCenterY - 69 : 185,
+           linkHealthColor(surface, state.linkHealth));
 
-  const char* dialLabel =
-      state.quotaStale
-          ? "SYNC STALE"
-          : (state.linkHealth == LinkHealth::Offline ? "WAITING CODEX"
-                                                     : "WEEKLY LEFT");
-  const std::uint16_t dialLabelColor = state.quotaStale ? kWarning : kMuted;
-  centered(surface, dialLabel, kCenterX, kQuotaCenterY - 39, dialLabelColor);
+  if (diagnostic) {
+    const char* dialLabel = state.quotaStale ? "SYNC STALE" : "WAITING CODEX";
+    const std::uint16_t dialLabelColor = state.quotaStale ? kWarning : kMuted;
+    centered(surface, dialLabel, kCenterX, kQuotaCenterY - 39, dialLabelColor);
+  }
 
   char reset[24];
   formatReset(state.resetInSeconds, reset, sizeof(reset));
@@ -315,12 +315,13 @@ void drawSmallText(Surface& surface, const State& state) {
                                                    : "NO QUOTA DATA");
   const std::uint16_t resetColor =
       state.quotaStale ? kMuted : (state.quotaAvailable ? kText : kMuted);
-  centered(surface, resetLabel, kCenterX, kQuotaCenterY + 43, resetColor);
+  centered(surface, resetLabel, kCenterX,
+           diagnostic ? kQuotaCenterY + 43 : 270, resetColor);
 
   // Compact battery telemetry at the foot of the dial. A bright bolt is the
   // charging affordance; percentage remains readable without relying on color.
   constexpr int kBatteryX = kCenterX - 38;
-  constexpr int kBatteryY = kQuotaCenterY + 62;
+  const int kBatteryY = diagnostic ? kQuotaCenterY + 62 : 293;
   constexpr int kBatteryWidth = 29;
   constexpr int kBatteryHeight = 15;
   const int battery = std::max(-1, std::min(100,
@@ -373,14 +374,16 @@ void drawSmallText(Surface& surface, const State& state) {
 template <typename Surface>
 void drawQuotaValue(Surface& surface, const State& state) {
   surface.loadFont(font_data::kSpaceMono46Vlw);
+  const bool diagnostic = state.quotaStale || state.linkHealth == LinkHealth::Offline;
+  const int valueY = diagnostic ? kQuotaCenterY + 1 : 228;
   char value[8];
   if (state.quotaAvailable) {
     std::snprintf(value, sizeof(value), "%.0f%%",
                   std::max(0.0f, std::min(100.0f, state.remainingPercent)));
-    centered(surface, value, kCenterX, kQuotaCenterY + 1,
+    centered(surface, value, kCenterX, valueY,
              state.quotaStale ? kMuted : kText);
   } else {
-    centered(surface, "--", kCenterX, kQuotaCenterY + 1, kMuted);
+    centered(surface, "--", kCenterX, valueY, kMuted);
   }
   surface.unloadFont();
 }
