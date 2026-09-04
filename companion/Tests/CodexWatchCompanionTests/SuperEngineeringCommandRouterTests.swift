@@ -52,7 +52,7 @@ final class WorkspaceCommandRouterTests: XCTestCase {
         XCTAssertEqual(fixture.emitter.calls, [
             .init(command: .previousHermesTab, identity: hermes),
             .init(command: .nextHermesTab, identity: hermes),
-            .init(command: .newHermesTab, identity: hermes),
+            .init(command: .confirmHermesSelection, identity: hermes),
         ])
     }
 

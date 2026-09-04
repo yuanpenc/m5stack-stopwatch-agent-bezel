@@ -55,27 +55,27 @@ final class SuperEngineeringKeyEmitterTests: XCTestCase {
         }
     }
 
-    func testHermesUsesTabAndTWithFixedModifiersAndRejectsCrossAppCommands() {
+    func testHermesPreservesTabBrowsingAndConfirmsWithControlRelease() {
         let hermes = ApplicationIdentity(processIdentifier: 303, bundleIdentifier: "com.nousresearch.hermes")
-        let cases: [(WorkspaceNavigationCommand, CGKeyCode, CGEventFlags)] = [
-            (.previousHermesTab, 48, [.maskControl, .maskShift]),
-            (.nextHermesTab, 48, [.maskControl]),
-            (.newHermesTab, 17, [.maskCommand]),
+        let cases: [(WorkspaceNavigationCommand, CGKeyCode, CGEventFlags, CGEventFlags)] = [
+            (.previousHermesTab, 48, [.maskControl, .maskShift], [.maskControl, .maskShift]),
+            (.nextHermesTab, 48, [.maskControl], [.maskControl]),
+            (.confirmHermesSelection, 59, [.maskControl], []),
         ]
-        for (command, key, flags) in cases {
+        for (command, key, downFlags, upFlags) in cases {
             let poster = SequencePosterStub()
             let emitter = SystemProcessTargetedKeyEmitter(frontmostIdentity: { hermes }, identityForProcess: { _ in hermes }, poster: poster)
             XCTAssertTrue(emitter.emit(command, to: hermes))
             XCTAssertEqual(poster.deliveries, [.init(strokes: [
-                ProcessKeyStroke(keyCode: key, keyDown: true, flags: flags),
-                ProcessKeyStroke(keyCode: key, keyDown: false, flags: flags)
+                ProcessKeyStroke(keyCode: key, keyDown: true, flags: downFlags),
+                ProcessKeyStroke(keyCode: key, keyDown: false, flags: upFlags)
             ], processIdentifier: 303)])
             XCTAssertFalse(emitter.emit(.nextProject, to: hermes))
             XCTAssertEqual(poster.deliveries.count, 1)
         }
         let poster = SequencePosterStub()
         let emitter = SystemProcessTargetedKeyEmitter(frontmostIdentity: { self.target }, identityForProcess: { _ in self.target }, poster: poster)
-        XCTAssertFalse(emitter.emit(.newHermesTab, to: target))
+        XCTAssertFalse(emitter.emit(.confirmHermesSelection, to: target))
         XCTAssertTrue(poster.deliveries.isEmpty)
     }
 

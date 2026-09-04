@@ -101,14 +101,17 @@ final class SystemProcessTargetedKeyEmitter: ProcessTargetedKeyEmitting {
         case .nextHermesTab:
             keyCode = CGKeyCode(kVK_Tab)
             flags = [.maskControl]
-        case .newHermesTab:
-            keyCode = CGKeyCode(kVK_ANSI_T)
-            flags = [.maskCommand]
+        case .confirmHermesSelection:
+            keyCode = CGKeyCode(kVK_Control)
+            flags = [.maskControl]
         }
+        // Hermes commits its session picker when Control is released. Clearing
+        // this flag is essential for a modifier-up event; never use Return.
+        let keyUpFlags: CGEventFlags = command == .confirmHermesSelection ? [] : flags
         return poster.post(
             [
                 ProcessKeyStroke(keyCode: keyCode, keyDown: true, flags: flags),
-                ProcessKeyStroke(keyCode: keyCode, keyDown: false, flags: flags),
+                ProcessKeyStroke(keyCode: keyCode, keyDown: false, flags: keyUpFlags),
             ],
             to: identity.processIdentifier
         )

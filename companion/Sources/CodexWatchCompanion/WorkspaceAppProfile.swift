@@ -31,7 +31,7 @@ enum WorkspaceAppProfile: CaseIterable {
         case (.super, .right): return .nextTab
         case (.hermes, .up): return .previousHermesTab
         case (.hermes, .down): return .nextHermesTab
-        case (.hermes, .right): return .newHermesTab
+        case (.hermes, .right): return .confirmHermesSelection
         default: return nil
         }
     }
@@ -39,12 +39,12 @@ enum WorkspaceAppProfile: CaseIterable {
 
 enum WorkspaceNavigationCommand: Equatable {
     case previousProject, nextProject, nextTab
-    case previousHermesTab, nextHermesTab, newHermesTab
+    case previousHermesTab, nextHermesTab, confirmHermesSelection
 
     var profile: WorkspaceAppProfile {
         switch self {
         case .previousProject, .nextProject, .nextTab: return .super
-        case .previousHermesTab, .nextHermesTab, .newHermesTab: return .hermes
+        case .previousHermesTab, .nextHermesTab, .confirmHermesSelection: return .hermes
         }
     }
 }
